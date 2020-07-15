@@ -19,7 +19,6 @@ import pandas as pd
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
 
-from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_projection_matrix,
                                    get_intrinsics, load_setting_file)
 
@@ -210,7 +209,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
         tuple -- polygons, rotated downsample points, and rotation matrix
     """
 
-    # 1. Convert depth frame to downsampled organized point cloud
+    # 1. Convert depth frame to (can or cannot happen) downsampled organized point cloud
     # 2. Create a smooth mesh from the organized point cloud (OrganizedPointFilters)
     #     1. You can skip smoothing if desired and only rely upon Intel Realsense SDK
     # 3. Estimate dominate plane normals in scene (FastGA)
@@ -292,6 +291,7 @@ def colorize_images_open_cv(color_image, depth_image, config):
 
 def capture(config, video=None):
     # Configure streams
+    # TODO - Remove pc
     pipeline, pc, process_modules, filters, proj_mat = create_pipeline(config)
     logging.info("Pipeline Created")
 

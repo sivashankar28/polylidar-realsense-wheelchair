@@ -24,7 +24,7 @@ import open3d as o3d
 
 # def split_triangles(mesh):
 #     """
-#     Split the mesh in independent triangles    
+#     Split the mesh in independent triangles
 #     """
 #     triangles = np.asarray(mesh.triangles).copy()
 #     vertices = np.asarray(mesh.vertices).copy()
@@ -166,11 +166,10 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
     t2 = time.perf_counter()
 
     logging.debug("Gaussian Accumulator - Normals Sampled: %d; Took (ms): %.2f",
-                 triangle_normals_ds.shape[0], (t2 - t1) * 1000)
+                  triangle_normals_ds.shape[0], (t2 - t1) * 1000)
 
     avg_peaks, pcd_all_peaks, arrow_avg_peaks, timings_dict = get_image_peaks(
         ico_chart, ga, level=level, with_o3d=with_o3d, **kwargs)
-
 
     # Create Open3D structures for visualization
     if with_o3d:
@@ -234,11 +233,12 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
     time_filter = []
     # all_poly_lines = []
     geometric_planes = []
+    # all_polygons = [[NORMAL_0_POLY_1, NORMAL_0_POLY_2], [NORMAL_1_POLY_1]]
     if filter_polygons:
         vertices = np.asarray(tri_mesh.vertices)
         for i in range(avg_peaks.shape[0]):
             avg_peak = avg_peaks[i, :]
-            rm, _ = R.align_vectors([[0, 0, 1]], [avg_peak])
+            rm, _ = R.align_vectors([[0, 0, 1]], [avg_peak])  # Rotating matrix the polygon
             polygons_for_normal = all_polygons[i]
             planes = all_planes[i]
             # print(polygons_for_normal)
@@ -246,7 +246,8 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
                 planes_shapely, obstacles_shapely, planes_indices, filter_time = filter_and_create_polygons(
                     vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
 
-                geometric_planes_for_normal = [extract_geometric_plane(plane_poly[0], planes[plane_idx], tri_mesh, avg_peak) for (plane_poly, plane_idx) in zip(planes_shapely, planes_indices)]
+                geometric_planes_for_normal = [extract_geometric_plane(plane_poly[0], planes[plane_idx], tri_mesh, avg_peak) for (
+                    plane_poly, plane_idx) in zip(planes_shapely, planes_indices)]
                 geometric_planes.append(geometric_planes_for_normal)
 
                 all_planes_shapely.extend(planes_shapely)
@@ -257,5 +258,3 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
     timings = dict(t_polylidar_planepoly=polylidar_time, t_polylidar_filter=np.array(time_filter).mean())
     # all_planes_shapely, all_obstacles_shapely, all_poly_lines, timings
     return all_planes_shapely, all_obstacles_shapely, geometric_planes, timings
-
-
