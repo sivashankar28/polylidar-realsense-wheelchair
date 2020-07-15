@@ -4,7 +4,7 @@ import argparse
 from os import path
 import time
 import uuid
-import itertools
+import warnings
 
 
 import numpy as np
@@ -27,6 +27,7 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
+from surfacedetector.utility.helper_wheelchair import analyze_planes
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,6 +44,10 @@ IDENTITY_MAT = MatrixDouble(IDENTITY)
 
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
+
+
+#ignore by message
+warnings.filterwarnings("ignore", message="Optimal rotation is not uniquely or poorly defined")
 
 
 def create_pipeline(config: dict):
@@ -237,13 +242,13 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
     # print(avg_peaks)
 
     # 4. Extract Polygons from mesh
-    planes, obstacles, timings = extract_planes_and_polygons_from_mesh(mesh, avg_peaks, pl_=ll_objects['pl'],
+    planes, obstacles, geometric_planes, timings = extract_planes_and_polygons_from_mesh(mesh, avg_peaks, pl_=ll_objects['pl'],
                                                                        filter_polygons=True, optimized=True,
                                                                        postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
 
     # return planes, obstacles, alg_timings, o3d_mesh
-    return planes, obstacles, alg_timings
+    return planes, obstacles, geometric_planes, alg_timings
 
 
 def valid_frames(color_image, depth_image, depth_min_valid=0.5):
@@ -284,6 +289,7 @@ def colorize_images_open_cv(color_image, depth_image, config):
     return color_image_cv, depth_image_cv
 
 
+
 def capture(config, video=None):
     # Configure streams
     pipeline, pc, process_modules, filters, proj_mat = create_pipeline(config)
@@ -306,6 +312,8 @@ def capture(config, video=None):
     counter = 0
     try:
         while True:
+            # input("Press Enter")
+            # print("")
             t00 = time.perf_counter()
             try:
                 color_image, depth_image, meta = get_frames(pipeline, pc, process_modules, filters, config)
@@ -325,10 +333,12 @@ def capture(config, video=None):
             try:
                 if config['show_polygon']:
                     # planes, obstacles, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
-                    planes, obstacles, timings = get_polygon(depth_image, config, ll_objects, **meta)
+                    planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
                     timings['t_get_frames'] = (t0 - t00) * 1000
                     timings['t_check_frames'] = (t1 - t0) * 1000
                     all_records.append(timings)
+
+                    curb_height = analyze_planes(geometric_planes)
 
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -369,9 +379,9 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f",
+                logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Curb Height: %.2f",
                              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                             timings['t_polylidar_planepoly'], timings['t_polylidar_filter'])
+                             timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], curb_height)
             except Exception as e:
                 logging.exception("Error!")
     finally:

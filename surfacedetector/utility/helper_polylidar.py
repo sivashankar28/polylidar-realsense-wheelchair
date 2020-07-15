@@ -6,13 +6,16 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 
-from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
+# from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from polylidar import MatrixDouble, Polylidar3D
 from polylidar.polylidarutil.open3d_util import create_lines
 
 from fastga import GaussianAccumulatorS2, MatX3d, IcoCharts
 from fastga.peak_and_cluster import find_peaks_from_ico_charts
 from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
+
+from surfacedetector.utility.helper_wheelchair import extract_geometric_plane
+from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
 
 # from surfacedetector.helper_mesh import create_open_3d_mesh
 
@@ -195,9 +198,9 @@ def filter_and_create_polygons(points, polygons, rm=None, line_radius=0.005,
                                                 positive_buffer=0.00, negative_buffer=0.00, simplify=0.0)):
     " Apply polygon filtering algorithm, return Open3D Mesh Lines "
     t1 = time.perf_counter()
-    planes, obstacles = filter_planes_and_holes(polygons, points, postprocess, rm=rm)
+    planes, obstacles, planes_indices = filter_planes_and_holes(polygons, points, postprocess, rm=rm)
     t2 = time.perf_counter()
-    return planes, obstacles, (t2 - t1) * 1000
+    return planes, obstacles, planes_indices, (t2 - t1) * 1000
 
 
 def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
@@ -230,16 +233,22 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
     all_obstacles_shapely = []
     time_filter = []
     # all_poly_lines = []
+    geometric_planes = []
     if filter_polygons:
         vertices = np.asarray(tri_mesh.vertices)
         for i in range(avg_peaks.shape[0]):
             avg_peak = avg_peaks[i, :]
             rm, _ = R.align_vectors([[0, 0, 1]], [avg_peak])
             polygons_for_normal = all_polygons[i]
+            planes = all_planes[i]
             # print(polygons_for_normal)
             if len(polygons_for_normal) > 0:
-                planes_shapely, obstacles_shapely, filter_time = filter_and_create_polygons(
+                planes_shapely, obstacles_shapely, planes_indices, filter_time = filter_and_create_polygons(
                     vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
+
+                geometric_planes_for_normal = [extract_geometric_plane(plane_poly[0], planes[plane_idx], tri_mesh, avg_peak) for (plane_poly, plane_idx) in zip(planes_shapely, planes_indices)]
+                geometric_planes.append(geometric_planes_for_normal)
+
                 all_planes_shapely.extend(planes_shapely)
                 all_obstacles_shapely.extend(obstacles_shapely)
                 time_filter.append(filter_time)
@@ -247,4 +256,6 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
 
     timings = dict(t_polylidar_planepoly=polylidar_time, t_polylidar_filter=np.array(time_filter).mean())
     # all_planes_shapely, all_obstacles_shapely, all_poly_lines, timings
-    return all_planes_shapely, all_obstacles_shapely, timings
+    return all_planes_shapely, all_obstacles_shapely, geometric_planes, timings
+
+

@@ -357,7 +357,7 @@ def laplacian_then_bilateral_opc_cuda(opc, loops_laplacian=5, _lambda=1.0, kerne
     """
     import organizedpointfilters.cuda as opf_cuda
     opc_float = (np.ascontiguousarray(opc[:, :, :3])).astype(np.float32)
-
+    
     t1 = time.perf_counter()
     if kernel_size == 3:
         opc_float_out = opf_cuda.kernel.laplacian_K3_cuda(opc_float, loops=loops_laplacian, _lambda=_lambda)
