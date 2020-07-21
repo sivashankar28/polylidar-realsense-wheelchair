@@ -1,8 +1,8 @@
 ---
-  name: Default Settings for D435 extracting multiple surfaces using Polylidar3D
+  name: Default Settings for D415 extracting multiple surfaces using Polylidar3D
   advanced: "surfacedetector/config/json/high_accuracy.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: true     # Only activate playback if this is true
+    enabled: true    # Only activate playback if this is true
     file: "data/curb1.bag"
     # file: "data/20200617_162944.bag"
     # file: "data/20200618_081754.bag"
@@ -10,10 +10,11 @@
   save:
     video: ""                   # currently doesn't do anything
     timings: "data/results.csv" # Where to save timing results
+    #curb_height: "data/curb_height.csv" #Where to save curb height results
     frames:                     # you can optionally add a list of integers frames which will be saved as pictures
   show_images: true
   show_polygon: true
-  color: # RGB Camera Settings
+  color: # RGB Camera Settings  
     width: 424 #424
     height: 240 #240
     framerate: 30

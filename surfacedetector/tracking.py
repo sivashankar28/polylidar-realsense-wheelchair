@@ -5,7 +5,9 @@ from os import path
 import time
 import uuid
 import warnings
-import serial
+import json
+import traceback
+import bisect
 
 
 import numpy as np
@@ -16,6 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import open3d as o3d
 import pandas as pd
+from scipy.spatial.transform import Rotation as R
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
@@ -39,6 +42,60 @@ VID_DIR = path.join(ASSETS_DIR, 'videos')
 PICS_DIR = path.join(ASSETS_DIR, 'pics')
 DEFAULT_CONFIG_FILE = path.join(CONFIG_DIR, "default.yaml")
 
+
+# T265 to D400
+H_t265_d400 = np.array([
+    [1, 0, 0, 0],
+    [0, -1.0, 0, 0],
+    [0, 0, -1.0, 0],
+    [0, 0, 0, 1]])
+
+H_Standard_t265 = np.array([
+    [1, 0, 0, 0],
+    [0, 0, -1, 0],
+    [0, 1, 0, 0],
+    [0, 0, 0, 1]])
+
+T265_ROTATION = []
+T265_TIMES = []
+MAX_POSES = 100
+
+
+def callback_pose(frame):
+    global T265_TRANSLATION, T265_ROTATION
+    try:
+        ts = frame.get_timestamp()
+        domain = frame.frame_timestamp_domain
+        pose = frame.as_pose_frame()
+        data = pose.get_pose_data()
+        t = data.translation
+        r = data.rotation
+        T265_ROTATION.append([r.x, r.y, r.z, r.w])
+        T265_TIMES.append(int(ts))
+        if len(T265_TIMES) >= MAX_POSES:
+            T265_ROTATION.pop(0)
+            T265_TIMES.pop(0)
+    except Exception:
+        logging.exception("Error in callback for pose")
+
+def get_pose_index(ts_):
+    ts = int(ts_)
+    idx = bisect.bisect_left(T265_TIMES, ts, lo=0)
+    return min(idx, len(T265_TIMES) - 1)
+
+
+def get_pose_matrix(ts_):
+    logging.debug("Get Pose at %r", int(ts_))
+    idx = get_pose_index(ts_)
+    quat = T265_ROTATION[idx]
+    ts = T265_TIMES[idx]
+
+    H_t265_W = R.from_quat(quat).as_matrix()
+    extrinsic = H_t265_W @ H_t265_d400[:3, :3]
+    logging.debug("Frame TimeStamp: %r; Pose TimeStamp %r", int(ts_), ts)
+    return extrinsic
+
+
 IDENTITY = np.identity(3)
 IDENTITY_MAT = MatrixDouble(IDENTITY)
 
@@ -59,44 +116,68 @@ def create_pipeline(config: dict):
     Returns:
         tuple -- pipeline, pointcloud, decimate, filters(list), colorizer (not used)
     """
-    # Create pipeline and config
+    # # Create pipeline and config
     pipeline = rs.pipeline()
     rs_config = rs.config()
 
-    if config['playback']['enabled']:
-        # Load recorded bag file
-        rs.config.enable_device_from_file(
-            rs_config, config['playback']['file'], config['playback'].get('repeat', False))
-    else:
+    # if config['playback']['enabled']:
+    #     # Load recorded bag file
+    #     rs.config.enable_device_from_file(
+    #         rs_config, config['playback']['file'], config['playback'].get('repeat', False))
+    #else:
+
         # Ensure device is connected
-        ctx = rs.context()
-        devices = ctx.query_devices()
-        if len(devices) == 0:
-            logging.error("No connected Intel Realsense Device!")
+    ctx = rs.context()
+    devices = ctx.query_devices()
+    dev_d400 = None
+    dev_t265 = None
+    for dev in devices:
+        dev_name = dev.get_info(rs.camera_info.name)
+        print("Found {}".format(dev_name))
+        if "Intel RealSense D4" in dev_name:
+           dev_d400 = dev
+        elif "Intel RealSense T265" in dev_name:
+           dev_t265 = dev
+
+
+       
+        if len(devices) != 2:
+            logging.error("Need 2 connected Intel Realsense Devices!")
             sys.exit(1)
 
         if config['advanced']:
             logging.info("Attempting to enter advanced mode and upload JSON settings file")
             load_setting_file(ctx, devices, config['advanced'])
 
+    # Configure streams
     rs_config.enable_stream(
         rs.stream.depth, config['depth']['width'],
         config['depth']['height'],
         rs.format.z16, config['depth']['framerate'])
+    
     # other_stream, other_format = rs.stream.infrared, rs.format.y8
     rs_config.enable_stream(
         rs.stream.color, config['color']['width'],
         config['color']['height'],
         rs.format.rgb8, config['color']['framerate'])
 
+    # Open T265
+    if dev_t265:
+        # Unable to open as a pipeline, must use sensors
+        sensor_t265 = dev_t265.query_sensors()[0]
+        profiles = sensor_t265.get_stream_profiles()
+        pose_profile = [profile for profile in profiles if profile.stream_name() == 'Pose'][0]
+        sensor_t265.open(pose_profile)
+        sensor_t265.start(callback_pose)
+
     # Start streaming
     pipeline.start(rs_config)
     profile = pipeline.get_active_profile()
 
-    if config['playback']['enabled']:
-        dev = profile.get_device()
-        playback = dev.as_playback()
-        playback.set_real_time(False)
+    # if config['playback']['enabled']:
+    #     dev = profile.get_device()
+    #     playback = dev.as_playback()
+    #     playback.set_real_time(False)
 
     # Processing blocks
     filters = []
@@ -104,6 +185,7 @@ def create_pipeline(config: dict):
     align = rs.align(rs.stream.color)
     depth_to_disparity = rs.disparity_transform(True)
     disparity_to_depth = rs.disparity_transform(False)
+
     # Decimation
     if config.get("filters").get("decimation"):
         filt = config.get("filters").get("decimation")
@@ -135,7 +217,7 @@ def create_pipeline(config: dict):
     intrinsics = get_intrinsics(pipeline, rs.stream.color)
     proj_mat = create_projection_matrix(intrinsics)
 
-    return pipeline, pc, process_modules, filters, proj_mat
+    return pipeline, pc, process_modules, filters, proj_mat, sensor_t265
 
 
 def get_frames(pipeline, pc, process_modules, filters, config):
@@ -196,6 +278,8 @@ def get_frames(pipeline, pc, process_modules, filters, config):
 
     return color_image, depth_image, dict(h=h, w=w, intrinsics=d_intrinsics_matrix)
 
+def t265_frame_to_standard(rm):
+    return H_Standard_t265[:3, :3] @ rm
 
 def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, **kwargs):
     """Extract polygons from point cloud
@@ -212,7 +296,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
 
     # 1. Convert depth frame to (can or cannot happen) downsampled organized point cloud
     # 2. Create a smooth mesh from the organized point cloud (OrganizedPointFilters)
-    #     1. You can skip smoothing if desired and only rely upon Intel Realsense SDK
+    #     Note: You can skip smoothing if desired and only rely upon Intel Realsense SDK
     # 3. Estimate dominate plane normals in scene (FastGA)
     # 4. Extract polygons from mesh using dominant plane normals (Polylidar3D)
 
@@ -292,8 +376,7 @@ def colorize_images_open_cv(color_image, depth_image, config):
 
 def capture(config, video=None):
     # Configure streams
-    # TODO - Remove pc
-    pipeline, pc, process_modules, filters, proj_mat = create_pipeline(config)
+    pipeline, pc, process_modules, filters, proj_mat, sensor_t265 = create_pipeline(config)
     logging.info("Pipeline Created")
 
     # Long lived objects. These are the object that hold all the algorithms for surface exraction.
@@ -333,6 +416,8 @@ def capture(config, video=None):
 
             try:
                 if config['show_polygon']:
+                    r_matrix = get_pose_matrix(meta['ts'])
+                    r_matrix = t265_frame_to_standard(r_matrix)                  
                     # planes, obstacles, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
                     planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
                     timings['t_get_frames'] = (t0 - t00) * 1000
@@ -396,8 +481,6 @@ def capture(config, video=None):
     if config['save'].get('timings') is not "":
         df.to_csv(config['save'].get('timings', 'data/timings.csv'))
 
-# arduino=serial.Serial('tty/ACM0', 9600)
-# arduino.write(b'curb_height')
 
 def main():
     parser = argparse.ArgumentParser(description="Captures ground plane and obstacles as polygons")
