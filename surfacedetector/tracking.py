@@ -90,10 +90,10 @@ def get_pose_matrix(ts_):
     quat = T265_ROTATION[idx]
     ts = T265_TIMES[idx]
 
-    H_t265_W = R.from_quat(quat).as_matrix()
-    extrinsic = H_t265_W @ H_t265_d400[:3, :3]
+    euler_t265 = R.from_quat(quat).as_euler("zxy", degrees=True)
+    # extrinsic = H_t265_W @ H_t265_d400[:3, :3]
     logging.debug("Frame TimeStamp: %r; Pose TimeStamp %r", int(ts_), ts)
-    return extrinsic
+    return euler_t265
 
 
 IDENTITY = np.identity(3)
@@ -139,15 +139,14 @@ def create_pipeline(config: dict):
         elif "Intel RealSense T265" in dev_name:
            dev_t265 = dev
 
+      
+    if len(devices) != 2:
+        logging.error("Need 2 connected Intel Realsense Devices!")
+        sys.exit(1)
 
-       
-        if len(devices) != 2:
-            logging.error("Need 2 connected Intel Realsense Devices!")
-            sys.exit(1)
-
-        if config['advanced']:
-            logging.info("Attempting to enter advanced mode and upload JSON settings file")
-            load_setting_file(ctx, devices, config['advanced'])
+    if config['advanced']:
+        logging.info("Attempting to enter advanced mode and upload JSON settings file")
+        load_setting_file(ctx, devices, config['advanced'])
 
     # Configure streams
     rs_config.enable_stream(
@@ -270,13 +269,14 @@ def get_frames(pipeline, pc, process_modules, filters, config):
     # image buffer. Create a copy so this doesn't occur
     color_image = np.copy(np.asanyarray(color_frame.get_data()))
     depth_image = np.asanyarray(depth_frame.get_data())
+    depth_ts = depth_frame.get_timestamp()
 
     threshold = config['filters'].get('threshold')
     if threshold is not None and threshold['active']:
         mask = depth_image[:, :] > int(threshold['distance'] * 1000)
         depth_image[mask] = 0
-
-    return color_image, depth_image, dict(h=h, w=w, intrinsics=d_intrinsics_matrix)
+    meta = dict(h=h, w=w, intrinsics=d_intrinsics_matrix, ts= depth_ts )
+    return color_image, depth_image, meta
 
 def t265_frame_to_standard(rm):
     return H_Standard_t265[:3, :3] @ rm
@@ -416,8 +416,9 @@ def capture(config, video=None):
 
             try:
                 if config['show_polygon']:
-                    r_matrix = get_pose_matrix(meta['ts'])
-                    r_matrix = t265_frame_to_standard(r_matrix)                  
+                    euler_t265 = get_pose_matrix(meta['ts'])
+                    logging.info('euler_t265: %r', euler_t265)
+                    # r_matrix = t265_frame_to_standard(r_matrix)                  
                     # planes, obstacles, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
                     planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
                     timings['t_get_frames'] = (t0 - t00) * 1000
@@ -465,9 +466,9 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Curb Height: %.2f",
-                             counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                             timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], curb_height)
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Curb Height: %.2f",
+                #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
+                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], curb_height)
             except Exception as e:
                 logging.exception("Error!")
     finally:
