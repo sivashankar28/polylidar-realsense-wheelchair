@@ -173,10 +173,10 @@ def create_pipeline(config: dict):
     pipeline.start(rs_config)
     profile = pipeline.get_active_profile()
 
-    # if config['playback']['enabled']:
-    #     dev = profile.get_device()
-    #     playback = dev.as_playback()
-    #     playback.set_real_time(False)
+    if config['playback']['enabled']:
+        dev = profile.get_device()
+        playback = dev.as_playback()
+        playback.set_real_time(False)
 
     # Processing blocks
     filters = []
@@ -426,6 +426,9 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height = analyze_planes(geometric_planes)
+                    #logging.info('Curb Height: %.2f', curb_height)
+                    # arduino=serial.Serial('tty/ACM0', 9600)
+                    # arduino.write(b'curb_height')
 
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)

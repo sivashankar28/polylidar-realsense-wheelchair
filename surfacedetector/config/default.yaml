@@ -73,7 +73,7 @@
       min_total_weight: 0.05
   polygon:
     frameskip: # criterions to skip polygon generation given input data
-      depth_min_valid: 0.1 # minimum percentage needed from depth image pixels with valid data
+      depth_min_valid: 0.4 # minimum percentage needed from depth image pixels with valid data
     postprocess: # post processing of polygons returned from polylidar for ground/obstacle identification
       filter: # obstacles must have these characteristics
         hole_area:

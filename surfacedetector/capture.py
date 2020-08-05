@@ -254,7 +254,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
 def valid_frames(color_image, depth_image, depth_min_valid=0.5):
     """Determines if returned color and depth images are valid for polygon extraction
 
-    Arguments:
+    Arguments:`
         color_image {ndarray} -- Color image
         depth_image {ndarray} -- Depth image
 
@@ -396,7 +396,8 @@ def capture(config, video=None):
     if config['save'].get('timings') is not "":
         df.to_csv(config['save'].get('timings', 'data/timings.csv'))
 
-# arduino=serial.Serial('tty/ACM0', 9600)
+# arduino=serial.Serial('/dev/ttyACM0', 9600)
+# time.sleep(2)
 # arduino.write(b'curb_height')
 
 def main():
