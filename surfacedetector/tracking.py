@@ -426,7 +426,7 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height = analyze_planes(geometric_planes)
-                    #logging.info('Curb Height: %.2f', curb_height)
+                    logging.info('Curb Height: %.2f', curb_height)
                     # arduino=serial.Serial('tty/ACM0', 9600)
                     # arduino.write(b'curb_height')
 
