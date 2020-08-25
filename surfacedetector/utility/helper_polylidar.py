@@ -231,6 +231,7 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
     all_planes_shapely = []
     all_obstacles_shapely = []
     time_filter = []
+    time_geometric_planes = []
     # all_poly_lines = []
     geometric_planes = []
     # all_polygons = [[NORMAL_0_POLY_1, NORMAL_0_POLY_2], [NORMAL_1_POLY_1]]
@@ -246,15 +247,18 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
                 planes_shapely, obstacles_shapely, planes_indices, filter_time = filter_and_create_polygons(
                     vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
 
+                t3 = time.perf_counter()
                 geometric_planes_for_normal = [extract_geometric_plane(plane_poly[0], planes[plane_idx], tri_mesh, avg_peak) for (
                     plane_poly, plane_idx) in zip(planes_shapely, planes_indices)]
                 geometric_planes.append(geometric_planes_for_normal)
+                t4 = time.perf_counter()
+                time_geometric_planes.append((t4 - t3) * 1000)
 
                 all_planes_shapely.extend(planes_shapely)
                 all_obstacles_shapely.extend(obstacles_shapely)
                 time_filter.append(filter_time)
                 # all_poly_lines.extend(poly_lines)
 
-    timings = dict(t_polylidar_planepoly=polylidar_time, t_polylidar_filter=np.array(time_filter).mean())
+    timings = dict(t_polylidar_planepoly=polylidar_time, t_polylidar_filter=np.array(time_filter).mean(), t_geometric_planes=np.array(time_geometric_planes).sum())
     # all_planes_shapely, all_obstacles_shapely, all_poly_lines, timings
     return all_planes_shapely, all_obstacles_shapely, geometric_planes, timings

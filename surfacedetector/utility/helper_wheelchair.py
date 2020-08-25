@@ -47,6 +47,8 @@ def analyze_planes(geometric_planes):
 
     # This code will find the ground normal index, the index into geometric_planes
     # with the largest area of surfaces (e.g., the street and sidewalk)
+    if len(geometric_planes) < 2:
+        return 0.0
     max_area = 0.0
     ground_normal_index = 0
     mean_normal_ransac = np.array([0.0, 0.0, 0.0])
