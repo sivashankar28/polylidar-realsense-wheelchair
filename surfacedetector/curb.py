@@ -5,7 +5,6 @@ from os import path
 import time
 import uuid
 import itertools
-import warnings
 
 import numpy as np
 import yaml
@@ -19,7 +18,8 @@ import pandas as pd
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
 
-from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
+# from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
+from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
 from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_projection_matrix,
                                             get_intrinsics, load_setting_file, save_dict_to_json)
 
@@ -440,10 +440,10 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f; Curb Height: %.2f",
-                             counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                             timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
-                # logging.info(f"Curb Height: %.2f", curb_height)
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f; Curb Height: %.2f",
+                #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
+                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
+                logging.info(f"Curb Height: %.2f", curb_height)
             except Exception as e:
                 logging.exception("Error!")
     finally:

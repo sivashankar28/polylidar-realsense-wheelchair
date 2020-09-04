@@ -27,7 +27,7 @@ def extract_geometric_plane(polygon: Polygon, plane_triangle_indices, tri_mesh: 
     # all_points = vertices[all_point_indices, :]
 
     all_points = np.asarray(polygon.exterior.coords)
-    # centroid = np.mean(all_points, axis=0) # polygon.centroid ?
+    # centroid = np.mean(all_points, axis=0) # TODO polygon.centroid ?
     normal_ransac, centroid, _ = estimate_plane(all_points)
 
     return dict(point=centroid, normal=normal, all_points=all_points, area=polygon.area, normal_ransac=normal_ransac)
