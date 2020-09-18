@@ -27,7 +27,7 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair import analyze_planes
+from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane
 
 logging.basicConfig(level=logging.INFO)
 
@@ -413,6 +413,7 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height = analyze_planes(geometric_planes)
+                    hyperplane = hplane(first_plane, second_plane)
 
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -434,13 +435,21 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(uid)), images)
                     if res == ord('m'):
                         plt.imshow(np.asarray(ll_objects['ico'].image_to_vertex_idx))
-                        plt.show()
-                        plt.imshow(np.asarray(ll_objects['ico'].mask))
-                        plt.show()
-                        plt.imshow(np.asarray(ll_objects['ico'].image))
-                        plt.show()
+                        # plt.show()
+                        # plt.imshow(np.asarray(ll_objects['ico'].mask))
+                        # plt.show()
+                        # plt.imshow(np.asarray(ll_objects['ico'].image))
+                        # plt.show()
+                        # plt.plot(xx, yy, 'k-')
+                        # plt.plot(xx, yy_down, 'k--')
+                        # plt.plot(xx, yy_up, 'k--')
+                        # plt.scatter(clf.support_vectors_[:,0], clf.support_vectors_[:,1], s=80, facecolors='none')
+                        # plt.scatter(X[:,0], X[:,1], c=Y, cmap=plt.cm.Paired)
+                        # plt.axis('tight')
+                        # plt.show()
                         import ipdb; ipdb.set_trace()
-                        
+                    
+
                     to_save_frames = config['save'].get('frames')
                     if config['playback']['enabled'] and to_save_frames is not None and counter in to_save_frames:
                         logging.info("Saving Picture: {}".format(counter))

@@ -1,3 +1,4 @@
+import serial
 import logging
 import sys
 import argparse
@@ -27,7 +28,7 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair import analyze_planes
+from surfacedetector.utility.helper_wheelchair_svm import analyze_planes
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,7 +45,7 @@ IDENTITY_MAT = MatrixDouble(IDENTITY)
 
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 
 def create_pipeline(config: dict):
     """Sets up the pipeline to extract depth and rgb frames
@@ -265,7 +266,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
 
     Arguments:
         points {ndarray} -- NX3 numpy array
-        bonfig {dict} -- Configuration object
+        config {dict} -- Configuration object
         h {int} -- height
         w {int} -- width
 
@@ -403,7 +404,7 @@ def capture(config, video=None):
                 # Get 6DOF Pose at appropriate timestamp
                 if config['tracking']['enabled']:
                     euler_t265 = get_pose_matrix(meta['ts'])
-                    logging.info('euler_t265: %r', euler_t265)
+                    # logging.info('euler_t265: %r', euler_t265)
 
                 if config['show_polygon']:
                     # planes, obstacles, geometric_planes, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
@@ -413,7 +414,8 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height = analyze_planes(geometric_planes)
-
+                    ser.write(("{:.2f}".format(curb_height)+"\n").encode())
+                    
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
@@ -451,7 +453,6 @@ def capture(config, video=None):
                 #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
                 #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
                 logging.info(f"Curb Height: %.2f", curb_height)
-                
             except Exception as e:
                 logging.exception("Error!")
     finally:
@@ -474,6 +475,7 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
+            ser.flush()
             # Run capture loop
             capture(config, args.video)
         except yaml.YAMLError as exc:
