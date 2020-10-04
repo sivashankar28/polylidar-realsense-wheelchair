@@ -28,7 +28,7 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair_svm import analyze_planes
+from surfacedetector.utility.helper_wheelchair import analyze_planes
 
 logging.basicConfig(level=logging.INFO)
 

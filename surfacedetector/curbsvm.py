@@ -5,7 +5,8 @@ from os import path
 import time
 import uuid
 import itertools
-
+import warnings
+warnings.filterwarnings("ignore")
 import numpy as np
 import yaml
 import pyrealsense2 as rs
@@ -412,8 +413,8 @@ def capture(config, video=None):
                     timings['t_check_frames'] = (t1 - t0) * 1000
                     all_records.append(timings)
 
-                    curb_height = analyze_planes(geometric_planes)
-                    hyperplane = hplane(first_plane, second_plane)
+                    curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
+                    hyperplane1 = hplane(first_plane, second_plane)
 
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -425,8 +426,19 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
+                    pts = np.array([[25, 70], [25, 160],  
+                                    [110, 200], [200, 160],  
+                                    [200, 70], [110, 20]], 
+                                    np.int32) 
+  
+                    pts = pts.reshape((-1, 1, 2)) 
+                    hyperplane = cv2.polylines(images,[pts], True, (255, 0, 0), 2)
+                    hyperplane100 = cv2.addWeighted(images, 1, hyperplane, 0.1, gamma=0)
+                    cv2.imshow('RealSense Color/Depth (Aligned)',hyperplane100)
+
                     if video:
                         out_vid.write(images)
+
                     res = cv2.waitKey(1)
                     if res == ord('p'):
                         uid = uuid.uuid4()
@@ -435,11 +447,12 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(uid)), images)
                     if res == ord('m'):
                         plt.imshow(np.asarray(ll_objects['ico'].image_to_vertex_idx))
-                        # plt.show()
-                        # plt.imshow(np.asarray(ll_objects['ico'].mask))
-                        # plt.show()
-                        # plt.imshow(np.asarray(ll_objects['ico'].image))
-                        # plt.show()
+                        plt.show()
+                        plt.imshow(np.asarray(ll_objects['ico'].mask))
+                        plt.show()
+                        plt.imshow(np.asarray(ll_objects['ico'].image))
+                        plt.show()
+
                         # plt.plot(xx, yy, 'k-')
                         # plt.plot(xx, yy_down, 'k--')
                         # plt.plot(xx, yy_up, 'k--')

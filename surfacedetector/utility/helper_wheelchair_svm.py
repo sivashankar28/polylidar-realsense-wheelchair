@@ -1,7 +1,7 @@
 import time
 import logging
 import itertools
-
+import sys
 from shapely.geometry import Polygon
 import numpy as np
 from polylidar import HalfEdgeTriangulation
@@ -10,7 +10,6 @@ from surfacedetector.utility.helper_ransac import estimate_plane
 
 from sklearn import svm
 import matplotlib.pyplot as plt 
-from sklearn import svm
 from mpl_toolkits.mplot3d import axis3d
 
 def extract_geometric_plane(polygon: Polygon, plane_triangle_indices, tri_mesh: HalfEdgeTriangulation, normal: np.ndarray):
@@ -71,6 +70,8 @@ def analyze_planes(geometric_planes):
     # the same normal
     max_orthogonal_distance = 0.0
     geometric_planes_for_normal = geometric_planes[ground_normal_index]
+    first_plane = None
+    second_plane = None
     for pair in itertools.combinations(range(len(geometric_planes_for_normal)), 2):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]
@@ -83,35 +84,73 @@ def analyze_planes(geometric_planes):
     
 
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
-    return max_orthogonal_distance
+    return max_orthogonal_distance, first_plane, second_plane
 
 def hplane(first_plane, second_plane):
-    first_points = first_plane['all_points'] # hopefully a NX3 numpy array
-    second_points = second_plane['all_points'] # hopefully a KX3 numpy array
+    if first_plane is None or second_plane is None:
+        return
 
-    X = np.concatenate([first_points, seconds_points],axis=0) # will be a (N+K) X 3 numpy array
-    first_points_y = p.zeros((first_points.shape[0],), dtype=int)
-    second_points_y = p.ones((second_points.shape[0],), dtype=int)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    first_points = first_plane['all_points']   # NX3 numpy array
+    second_points = second_plane['all_points'] # KX3 numpy array
+
+    normal = first_plane['normal']
+
+    first_points_ = first_points + np.ones_like(first_points) * normal
+    first_points = np.concatenate([first_points, first_points_], axis=0)
+
+    second_points_ = second_points + np.ones_like(second_points) * normal
+    second_points = np.concatenate([second_points, second_points_], axis=0)
+
+    # Make a duplicate plane for the street level and sidewalk level so we can fit a hyperplane between it
+    X = np.concatenate([first_points, second_points],axis=0) # will be a (N+K) X 3 numpy array
+    first_points_y = np.zeros((first_points.shape[0],), dtype=int)
+    second_points_y = np.ones((second_points.shape[0],), dtype=int)
     Y = np.concatenate([first_points_y, second_points_y], axis=0)
-    
+
+    # ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=Y)
+
     C = 1.0 #SVM regularization parameter
-    svc = svm.SVC(kernal='linear', C=C).fit(X,Y)
-    lin_svc = svm.LinearSVC(C=C).fit(X,Y)
+    clf= svm.SVC(kernel='linear', C=C).fit(X,Y)
      
     #Fit the model
-    clf = svm.SVC()
-    clf.fit(X, y)
-    SVC()
+    clf.fit(X, Y)
 
     #Get the seperating plane
-    w = clf.coef[0]
-    a = -w[0] / w[1]
-    xx = np.linspace(-5,5)
-    yy = a * xx - (clf.intercept_[0]) / w[1]
-
-    #Plot the parallels to the separating hyperplane that pass through the support vectors
-    b = clf.support_vectors_[0]
-    yy_down = a * xx + (b[1] - a * b[0])
-    b = clf.support_vectors_[-1]
-    yy_up = a * xx + (b[1] - a * b[0]) 
+    a = clf.coef_[0][0]
+    b = clf.coef_[0][1]
+    c = clf.coef_[0][2]
+    d = clf.intercept_[0]
     
+    normal_svm = np.array([a,b,c])
+    length_normal = np.linalg.norm(normal_svm)
+    print(np.linalg.norm(normal_svm))
+    normal_svm = normal_svm / np.linalg.norm(normal_svm)
+    offset = -d / length_normal
+
+    print(normal_svm)
+    print(-d)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_xlim([-2, 2])
+    ax.set_ylim([-2, 2])
+    ax.set_zlim([-2, 2])
+
+    xyz = normal_svm * offset
+    ax.quiver(xyz[0], xyz[1], xyz[2], normal_svm[0], normal_svm[1], normal_svm[2], length=1)
+    ax.scatter(0,0,0, c=0)
+
+    xx = np.arange(-2, 2, 0.25)
+    yy = np.arange(-2, 2, 0.25)
+    xx, yy = np.meshgrid(xx, yy)
+
+    zz = (-d - a*xx -b *yy) / c
+
+    ax.plot_surface(xx, yy, zz, alpha=0.2)
+    stuff = np.dot(normal,normal_svm)
+    print(stuff, "Should be close to 0")
+    # plt.show()
+    return zz
