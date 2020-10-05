@@ -46,28 +46,33 @@ def analyze_planes(geometric_planes):
 
     # This code will find the ground normal index, the index into geometric_planes
     # with the largest area of surfaces (e.g., the street and sidewalk)
-    if len(geometric_planes) < 2:
-        return 0.0
+    # if len(geometric_planes) < 2:
+    #     return 0.0, None, None
     max_area = 0.0
     ground_normal_index = 0
     mean_normal_ransac = np.array([0.0, 0.0, 0.0])
+    at_least_two_planes = False
     for i, geometric_planes_for_normal in enumerate(geometric_planes):
         if len(geometric_planes_for_normal) > 1:
+            at_least_two_planes = True
             total_area = 0.0
             total_normal_ransac = np.array([0.0, 0.0, 0.0])
             for j, plane in enumerate(geometric_planes_for_normal):
                 logging.debug(
                     f"Plane {j} - Normal: {plane['normal']:}, Ransac Normal: {plane['normal_ransac']:}, Point: {plane['point']:}")
                 # np.save(f'scratch/plane_{i}_{j}.npy', plane['all_points'])
-                total_normal_ransac += plane['normal_ransac']
+                total_normal_ransac += plane['normal_ransac'] * plane['area']
                 total_area += plane['area']
             if total_area > max_area:
                 max_area = total_area
                 ground_normal_index = i
-                mean_normal_ransac = total_normal_ransac / len(geometric_planes_for_normal)
+                mean_normal_ransac = total_normal_ransac / total_area
                 mean_normal_ransac = mean_normal_ransac / np.linalg.norm(mean_normal_ransac) * -1
+    if not at_least_two_planes:
+        return 0.0, None, None
     # This code will find the maximum orthogonal distance between any tow pair of surfaces with
     # the same normal
+    # import ipdb; ipdb.set_trace()
     max_orthogonal_distance = 0.0
     geometric_planes_for_normal = geometric_planes[ground_normal_index]
     first_plane_final = None
@@ -79,16 +84,12 @@ def analyze_planes(geometric_planes):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]
         second_plane = geometric_planes_for_normal[pair[1]]
-        if first_plane['area'] > first_plane_final_area:
-            first_plane_final = first_plane
-            first_plane_final_area = first_plane['area']
-        if second_plane['area'] > second_plane_final_area:
-            second_plane_final = second_plane
-            second_plane_final_area = second_plane['area']
-        orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
 
+        orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
         if orthoganal_distance > max_orthogonal_distance:
             max_orthogonal_distance = orthoganal_distance
+            first_plane_final = first_plane
+            second_plane_final = second_plane
     
 
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
@@ -107,7 +108,6 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     diff = points - point_on_plane
     dist = np.dot(diff, normal)
     scaled_vector = normal*dist[:,np.newaxis]
-    print(dist)
     # import ipdb; ipdb.set_trace()
     projected_points = points - scaled_vector
     
@@ -117,25 +117,24 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     diff = np.array([0.0,0.0,0.0]) - point_on_plane
     dist = np.dot(diff, plane_normal)
     dist = np.abs(dist)
-    # plane_point = np.array([0.0, 0.0, 0.0])
-    # vectors = np.array([[0.0, 0.0, 1.0], plane_normal])
-    # vectors_proj = project_points_geometric_plane(vectors, ground_normal, plane_point)
 
-    vec1 =  np.array([0.0, 0.0, 1.0])
+    vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
+    vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
 
-    a = np.dot(vec1, plane_normal)
+    vec1 = vectors_proj[0, :]
+    vec1 = vec1 / np.linalg.norm(vec1)
+    vec2 = vectors_proj[1, :] 
+    vec2 = vec2 / np.linalg.norm(vec2)
+
+    a = np.dot(vec1, vec2)
     theta = np.degrees(np.arccos(a))
-    theta = np.abs(theta - 90)
     return dist, theta
 
         
-
 def hplane(first_plane, second_plane):
     if first_plane is None or second_plane is None:
         return
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
     first_points = first_plane['all_points']   # NX3 numpy array
     second_points = second_plane['all_points'] # KX3 numpy array
     first_points_mean = np.mean(second_points, axis=0)
@@ -154,8 +153,6 @@ def hplane(first_plane, second_plane):
     second_points_y = np.ones((second_points.shape[0],), dtype=int)
     Y = np.concatenate([first_points_y, second_points_y], axis=0)
 
-    # ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=Y)
-
     C = 1.0 #SVM regularization parameter
     clf= svm.SVC(kernel='linear', C=C).fit(X,Y)
      
@@ -170,23 +167,11 @@ def hplane(first_plane, second_plane):
     
     normal_svm = np.array([a,b,c])
     length_normal = np.linalg.norm(normal_svm)
-    print(np.linalg.norm(normal_svm))
     normal_svm = normal_svm / np.linalg.norm(normal_svm)
     offset = -d / length_normal
 
-    # print(normal_svm)
-    # print(-d)
-
-    # ax.set_xlabel("X")
-    # ax.set_ylabel("Y")
-    # ax.set_zlabel("Z")
-    # ax.set_xlim([-2, 2])
-    # ax.set_ylim([-2, 2])
-    # ax.set_zlim([-2, 2])
-
     xyz = normal_svm * offset
-    # ax.quiver(xyz[0], xyz[1], xyz[2], normal_svm[0], normal_svm[1], normal_svm[2], length=1)
-    # ax.scatter(0,0,0, c=0)
+
     center = project_points_geometric_plane(np.expand_dims(first_points_mean, axis=0), normal_svm, xyz)[0, :]
     
     cross = np.cross(normal_svm, normal)

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from sklearn import svm
 import numpy as np
+from joblib import load
 from mpl_toolkits.mplot3d import Axes3D
 
 def make_square(cent, ax1, ax2, normal, w=1, h=1):
@@ -16,7 +17,6 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     diff = points - point_on_plane
     dist = np.dot(diff, normal)
     scaled_vector = normal*dist[:,np.newaxis]
-    print(dist)
     # import ipdb; ipdb.set_trace()
     projected_points = points - scaled_vector
     
@@ -27,9 +27,8 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     dist = np.dot(diff, plane_normal)
     dist = np.abs(dist)
 
-    plane_point = np.array([0.0, 0.0, 0.0])
-    vectors = np.array([[0.0, 0.0, 1.0], plane_normal])
-    vectors_proj = project_points_geometric_plane(vectors, ground_normal, plane_point)
+    vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
+    vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -45,11 +44,9 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     vec2 = vectors_proj[1, :] 
     vec2 = vec2 / np.linalg.norm(vec2)
 
-    print(vectors)
-    print(vec1, vec2)
     ax.quiver(0, 0, 0, ground_normal[0], ground_normal[1], ground_normal[2], length=0.5, color='orange')
-    ax.quiver(0, 0, 0, vectors[0, 0], vectors[0, 1], vectors[0,2], length=0.5, color='green')
-    ax.quiver(0, 0, 0, vectors[1, 0], vectors[1, 1], vectors[1,2], length=0.5, color='purple')
+    ax.quiver(0, 0, 0, vectors[0, 0], vectors[0, 1], vectors[0,2], length=0.5, color='blue')
+    ax.quiver(0, 0, 0, vectors[1, 0], vectors[1, 1], vectors[1,2], length=0.5, color='red')
 
     ax.quiver(0, 0, 0, vec1[0], vec1[1], vec1[2], length=1, color='blue')
     ax.quiver(0, 0, 0, vec2[0], vec2[1], vec2[2], length=1, color='red')
@@ -62,11 +59,12 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
 def main():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    data = np.load('svm.npz')
-    first_points = data['first_points']
-    second_points = data['second_points']
 
-    normal = data['normal']
+    data = load('data/planes.joblib')
+    first_points = data['first_plane']['all_points']
+    second_points = data['second_plane']['all_points']
+
+    normal = -data['first_plane']['normal_ransac']
     first_points_mean = np.mean(second_points, axis=0)
   
     first_points_ = first_points + np.ones_like(first_points) * normal
@@ -96,7 +94,6 @@ def main():
     
     normal_svm = np.array([a,b,c])
     length_normal = np.linalg.norm(normal_svm)
-    print(np.linalg.norm(normal_svm))
     normal_svm = normal_svm / np.linalg.norm(normal_svm)
     offset = -d / length_normal
     print(normal_svm)
@@ -116,7 +113,7 @@ def main():
     square_points = make_square(cent, normal, cross, normal_svm) 
 
     dist, theta = get_theta_and_distance(normal_svm, cent, normal)
-    
+    print(dist, theta)
     ax.quiver(xyz[0], xyz[1], xyz[2], normal_svm[0], normal_svm[1], normal_svm[2], length=1)
     ax.quiver(cent[0], cent[1], cent[2], normal_svm[0], normal_svm[1], normal_svm[2], length=1)
     ax.quiver(cent[0], cent[1], cent[2], normal[0], normal[1], normal[2], length=1)

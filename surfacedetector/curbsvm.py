@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import open3d as o3d
 import pandas as pd
+from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
@@ -397,8 +398,8 @@ def capture(config, video=None):
                 continue
             t1 = time.perf_counter()
             counter += 1
-            # if counter < 10:
-            #     continue
+            if counter < 1:
+                continue
 
             try:
                 # Get 6DOF Pose at appropriate timestamp
@@ -414,16 +415,21 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
-                    square_points, normal_svm, center = hplane(first_plane, second_plane)
-                    dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                    print(dist)
-                    print(theta)
+                    # curb height must be greater than 2 cm and first_plane must have been found
+                    if curb_height > 0.02 and first_plane is not None:
+                        square_points, normal_svm, center = hplane(first_plane, second_plane)
+                        dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                        plot_points(square_points, proj_mat, color_image, config)
+                        # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
+                    else:
+                        logging.warning("Couldn't find the street and curb surface")
+                    # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # Plot points
                     # import ipdb; ipdb.set_trace()
-                    plot_points(square_points, proj_mat, color_image, config)
                 # Show images
                 if config.get("show_images"):
                     # Convert to open cv image types (BGR)
