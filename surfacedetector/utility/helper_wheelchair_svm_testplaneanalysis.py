@@ -70,21 +70,13 @@ def analyze_planes(geometric_planes):
     # the same normal
     max_orthogonal_distance = 0.0
     geometric_planes_for_normal = geometric_planes[ground_normal_index]
-    first_plane_final = None
-    second_plane_final = None
-    first_plane_final_area = 0.0
-    second_plane_final_area = 0.0
-    
+    first_plane = None
+    second_plane = None
     for pair in itertools.combinations(range(len(geometric_planes_for_normal)), 2):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]
         second_plane = geometric_planes_for_normal[pair[1]]
-        if first_plane['area'] > first_plane_final_area:
-            first_plane_final = first_plane
-            first_plane_final_area = first_plane['area']
-        if second_plane['area'] > second_plane_final_area:
-            second_plane_final = second_plane
-            second_plane_final_area = second_plane['area']
+        
         orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
 
         if orthoganal_distance > max_orthogonal_distance:
@@ -92,70 +84,20 @@ def analyze_planes(geometric_planes):
     
 
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
-    return max_orthogonal_distance, first_plane_final, second_plane_final
-
-def make_square(cent, ax1, ax2, normal, w=0.75, h=0.25):
-    p1 = cent + h * ax1 + 0.5 * w * ax2 
-    p2 = cent + h * ax1 - 0.5 * w * ax2
-    p3 = cent - 0.5 * w * ax2 
-    p4 = cent + 0.5 * w * ax2
-    points = np.array([p1,p2,p3,p4])
-    projected_points = project_points_geometric_plane(points, normal, cent)
-    return projected_points
-
-def project_points_geometric_plane(points, normal, point_on_plane):
-    diff = points - point_on_plane
-    dist = np.dot(diff, normal)
-    scaled_vector = normal*dist[:,np.newaxis]
-    print(dist)
-    # import ipdb; ipdb.set_trace()
-    projected_points = points - scaled_vector
-    
-    return projected_points
-
-def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
-    diff = np.array([0.0,0.0,0.0]) - point_on_plane
-    dist = np.dot(diff, plane_normal)
-    dist = np.abs(dist)
-    # plane_point = np.array([0.0, 0.0, 0.0])
-    # vectors = np.array([[0.0, 0.0, 1.0], plane_normal])
-    # vectors_proj = project_points_geometric_plane(vectors, ground_normal, plane_point)
-
-    vec1 =  np.array([0.0, 0.0, 1.0])
-
-    a = np.dot(vec1, plane_normal)
-    theta = np.degrees(np.arccos(a))
-    theta = np.abs(theta - 90)
-    return dist, theta
-
-        
+    return max_orthogonal_distance, first_plane, second_plane
 
 def hplane(first_plane, second_plane):
     if first_plane is None or second_plane is None:
         return
+    first_points = first_plane['all_points'] # hopefully a NX3 numpy array
+    second_points = second_plane['all_points'] # hopefully a KX3 numpy array
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    first_points = first_plane['all_points']   # NX3 numpy array
-    second_points = second_plane['all_points'] # KX3 numpy array
-    first_points_mean = np.mean(second_points, axis=0)
-    normal = -first_plane['normal_ransac']
-    
-
-    first_points_ = first_points + np.ones_like(first_points) * normal
-    first_points = np.concatenate([first_points, first_points_], axis=0)
-
-    second_points_ = second_points + np.ones_like(second_points) * normal
-    second_points = np.concatenate([second_points, second_points_], axis=0)
-
-    # Make a duplicate plane for the street level and sidewalk level so we can fit a hyperplane between it
     X = np.concatenate([first_points, second_points],axis=0) # will be a (N+K) X 3 numpy array
     first_points_y = np.zeros((first_points.shape[0],), dtype=int)
     second_points_y = np.ones((second_points.shape[0],), dtype=int)
     Y = np.concatenate([first_points_y, second_points_y], axis=0)
-
-    # ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=Y)
-
+    np.savez("svm.npz", X=X, Y=Y, normal=first_plane['normal_ransac'], first_points=first_points, second_points=second_points)
+    sys.exit(0)
     C = 1.0 #SVM regularization parameter
     clf= svm.SVC(kernel='linear', C=C).fit(X,Y)
      
@@ -168,28 +110,8 @@ def hplane(first_plane, second_plane):
     c = clf.coef_[0][2]
     d = clf.intercept_[0]
     
-    normal_svm = np.array([a,b,c])
-    length_normal = np.linalg.norm(normal_svm)
-    print(np.linalg.norm(normal_svm))
-    normal_svm = normal_svm / np.linalg.norm(normal_svm)
-    offset = -d / length_normal
+    normal = np.array([a,b,c])
+    print(np.linalg.norm(normal))
+    normal = normal / np.linalg.norm(normal)
+    print(normal)
 
-    # print(normal_svm)
-    # print(-d)
-
-    # ax.set_xlabel("X")
-    # ax.set_ylabel("Y")
-    # ax.set_zlabel("Z")
-    # ax.set_xlim([-2, 2])
-    # ax.set_ylim([-2, 2])
-    # ax.set_zlim([-2, 2])
-
-    xyz = normal_svm * offset
-    # ax.quiver(xyz[0], xyz[1], xyz[2], normal_svm[0], normal_svm[1], normal_svm[2], length=1)
-    # ax.scatter(0,0,0, c=0)
-    center = project_points_geometric_plane(np.expand_dims(first_points_mean, axis=0), normal_svm, xyz)[0, :]
-    
-    cross = np.cross(normal_svm, normal)
-    square_points = make_square(center, normal, cross, normal_svm)    
-    
-    return square_points, normal_svm, center

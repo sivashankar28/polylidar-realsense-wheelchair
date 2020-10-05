@@ -22,13 +22,13 @@ from fastga import GaussianAccumulatorS2, IcoCharts
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
 from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_projection_matrix,
-                                            get_intrinsics, load_setting_file, save_dict_to_json)
+                                            get_intrinsics, load_setting_file, save_dict_to_json, plot_points)
 
 
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane
+from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane, get_theta_and_distance
 
 logging.basicConfig(level=logging.INFO)
 
@@ -414,11 +414,16 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
-                    hyperplane1 = hplane(first_plane, second_plane)
-
+                    square_points, normal_svm, center = hplane(first_plane, second_plane)
+                    dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                    print(dist)
+                    print(theta)
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
+                    # Plot points
+                    # import ipdb; ipdb.set_trace()
+                    plot_points(square_points, proj_mat, color_image, config)
                 # Show images
                 if config.get("show_images"):
                     # Convert to open cv image types (BGR)
@@ -426,16 +431,8 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
-                    pts = np.array([[25, 70], [25, 160],  
-                                    [110, 200], [200, 160],  
-                                    [200, 70], [110, 20]], 
-                                    np.int32) 
-  
-                    pts = pts.reshape((-1, 1, 2)) 
-                    hyperplane = cv2.polylines(images,[pts], True, (255, 0, 0), 2)
-                    hyperplane100 = cv2.addWeighted(images, 1, hyperplane, 0.1, gamma=0)
-                    cv2.imshow('RealSense Color/Depth (Aligned)',hyperplane100)
-
+                    
+                    
                     if video:
                         out_vid.write(images)
 
