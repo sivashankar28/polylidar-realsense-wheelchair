@@ -84,16 +84,12 @@ def analyze_planes(geometric_planes):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]
         second_plane = geometric_planes_for_normal[pair[1]]
-        if first_plane['area'] > first_plane_final_area:
-            first_plane_final = first_plane
-            first_plane_final_area = first_plane['area']
-        if second_plane['area'] > second_plane_final_area:
-            second_plane_final = second_plane
-            second_plane_final_area = second_plane['area']
         orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
 
         if orthoganal_distance > max_orthogonal_distance:
             max_orthogonal_distance = orthoganal_distance
+            first_plane_final = first_plane
+            second_plane_final = second_plane
     
 
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
