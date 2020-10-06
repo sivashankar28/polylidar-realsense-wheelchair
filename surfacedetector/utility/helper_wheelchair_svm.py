@@ -95,7 +95,7 @@ def analyze_planes(geometric_planes):
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
     return max_orthogonal_distance, first_plane_final, second_plane_final
 
-def make_square(cent, ax1, ax2, normal, w=0.75, h=0.25):
+def make_square(cent, ax1, ax2, normal, w=1.0, h=0.25):
     p1 = cent + h * ax1 + 0.5 * w * ax2 
     p2 = cent + h * ax1 - 0.5 * w * ax2
     p3 = cent - 0.5 * w * ax2 
@@ -127,6 +127,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     vec2 = vec2 / np.linalg.norm(vec2)
 
     a = np.dot(vec1, vec2)
+    # import ipdb; ipdb.set_trace()
     theta = np.degrees(np.arccos(a))
     return dist, theta
 
