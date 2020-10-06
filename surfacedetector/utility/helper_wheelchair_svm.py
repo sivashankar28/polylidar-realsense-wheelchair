@@ -128,6 +128,11 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
 
     a = np.dot(vec1, vec2)
     theta = np.degrees(np.arccos(a))
+    cross = np.cross(vec1, vec2)
+
+    if (np.dot(ground_normal, cross) < 0):
+        theta = -theta
+
     return dist, theta
 
         
