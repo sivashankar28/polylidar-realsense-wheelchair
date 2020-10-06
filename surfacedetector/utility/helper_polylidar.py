@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from polylidar import MatrixDouble, Polylidar3D
 from polylidar.polylidarutil.open3d_util import create_lines
 
-from fastga import GaussianAccumulatorS2, MatX3d, IcoCharts
+from fastga import GaussianAccumulatorS2Beta, MatX3d, IcoCharts
 from fastga.peak_and_cluster import find_peaks_from_ico_charts
 from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
 
@@ -122,8 +122,11 @@ def get_image_peaks(ico_chart, ga, level=2, with_o3d=False,
     ico_chart.fill_image(normalized_bucket_counts_by_vertex)  # this takes microseconds
     # plt.imshow(np.asarray(ico_chart.image))
     # plt.show()
+    average_vertex_normals = np.asarray(ga.get_average_normals_by_vertex(True)) if hasattr(ga, 'get_average_normals_by_vertex') else None
     peaks, clusters, avg_peaks, avg_weights = find_peaks_from_ico_charts(ico_chart, np.asarray(
-        normalized_bucket_counts_by_vertex), find_peaks_kwargs=find_peaks_kwargs, cluster_kwargs=cluster_kwargs, average_filter=average_filter)
+        normalized_bucket_counts_by_vertex), average_vertex_normals, find_peaks_kwargs=find_peaks_kwargs, cluster_kwargs=cluster_kwargs, average_filter=average_filter)
+    # peaks, clusters, avg_peaks, avg_weights = find_peaks_from_ico_charts(ico_chart, np.asarray(
+    #     normalized_bucket_counts_by_vertex), find_peaks_kwargs=find_peaks_kwargs, cluster_kwargs=cluster_kwargs, average_filter=average_filter)
     t2 = time.perf_counter()
 
     gaussian_normals_sorted = np.asarray(ico_chart.sphere_mesh.vertices)
@@ -149,7 +152,7 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
     if ga_ is not None:
         ga = ga_
     else:
-        ga = GaussianAccumulatorS2(level=level)
+        ga = GaussianAccumulatorS2Beta(level=level)
 
     if ico_chart_ is not None:
         ico_chart = ico_chart_

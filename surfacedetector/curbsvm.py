@@ -18,7 +18,7 @@ import pandas as pd
 from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastga import GaussianAccumulatorS2Beta, IcoCharts
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -373,7 +373,7 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2(level=config['fastga']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
     ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
 
     if video:
@@ -398,7 +398,8 @@ def capture(config, video=None):
                 continue
             t1 = time.perf_counter()
             counter += 1
-            if counter < 1:
+            if counter == 5:
+                import ipdb; ipdb.set_trace()
                 continue
 
             try:
