@@ -416,6 +416,7 @@ def capture(config, video=None):
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
                     # curb height must be greater than 2 cm and first_plane must have been found
+                    
                     if curb_height > 0.02 and first_plane is not None:
                         square_points, normal_svm, center = hplane(first_plane, second_plane)
                         dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
@@ -423,12 +424,11 @@ def capture(config, video=None):
                         plot_points(square_points, proj_mat, color_image, config)
                         # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
                     else:
-                        logging.warning("Couldn't find the street and curb surface")
+                        logging.warning("Couldn't find the street and sidewalk surface")
                     # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
-                    # Plot points
                     # import ipdb; ipdb.set_trace()
                 # Show images
                 if config.get("show_images"):
@@ -456,14 +456,7 @@ def capture(config, video=None):
                         plt.imshow(np.asarray(ll_objects['ico'].image))
                         plt.show()
 
-                        # plt.plot(xx, yy, 'k-')
-                        # plt.plot(xx, yy_down, 'k--')
-                        # plt.plot(xx, yy_up, 'k--')
-                        # plt.scatter(clf.support_vectors_[:,0], clf.support_vectors_[:,1], s=80, facecolors='none')
-                        # plt.scatter(X[:,0], X[:,1], c=Y, cmap=plt.cm.Paired)
-                        # plt.axis('tight')
-                        # plt.show()
-                        import ipdb; ipdb.set_trace()
+                        # import ipdb; ipdb.set_trace()
                     
 
                     to_save_frames = config['save'].get('frames')
