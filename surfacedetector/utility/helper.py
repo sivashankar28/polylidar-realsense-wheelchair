@@ -199,7 +199,9 @@ def plot_points(points, proj_mat, color_image, config):
     #  Project coordinates to image space
     pix_coords = get_pix_coordinates(pts, proj_mat,config['color']['width'], config['color']['height'])
     pix_coords = pix_coords.reshape((-1, 1, 2))
-    cv2.polylines(color_image, [pix_coords], True, color= (255,0,0), thickness=2)
+    cv2.polylines(color_image, [pix_coords], True, color= (225,0,0), thickness=2)
+    # cv2.addWeighted(color_image, 0.4, color_image, 0.6, 0)
+    
 
 
 def plot_polygons(polygons, points, ax):

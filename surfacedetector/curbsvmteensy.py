@@ -1,3 +1,4 @@
+import serial
 import logging
 import sys
 import argparse
@@ -46,7 +47,7 @@ IDENTITY_MAT = MatrixDouble(IDENTITY)
 
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 
 def create_pipeline(config: dict):
     """Sets up the pipeline to extract depth and rgb frames
@@ -416,6 +417,7 @@ def capture(config, video=None):
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
                     
+                    
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
                         square_points, normal_svm, center = hplane(first_plane, second_plane)
@@ -425,6 +427,10 @@ def capture(config, video=None):
                         # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
+                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta
+                    )+ "\n").encode())
+                    # ser.write(("{:.2f}".format(dist)+"\n").encode())
+                    # ser.write(("{:.2f}".format(theta)+"\n").encode())
                     # sys.exit()
                     # Plot polygon in rgb frame
                     # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -468,9 +474,9 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f",
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f; Curb Height: %.2f",
                 #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'])
+                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
                 logging.info(f"Curb Height: %.2f", curb_height)
                 
             except Exception as e:
@@ -495,6 +501,7 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
+            ser.flush()
             # Run capture loop
             capture(config, args.video)
         except yaml.YAMLError as exc:
