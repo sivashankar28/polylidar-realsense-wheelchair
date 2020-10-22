@@ -427,8 +427,7 @@ def capture(config, video=None):
                         # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta
-                    )+ "\n").encode())
+                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta)+ "\n").encode())
                     # ser.write(("{:.2f}".format(dist)+"\n").encode())
                     # ser.write(("{:.2f}".format(theta)+"\n").encode())
                     # sys.exit()

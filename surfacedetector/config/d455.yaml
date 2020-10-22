@@ -14,12 +14,12 @@
   show_images: true
   show_polygon: true
   color: # RGB Camera Settings
-    width: 848 #424
-    height: 480 #240
+    width: 424 #424
+    height: 240 #240
     framerate: 30
   depth: # Depth Camera Settings
-    width: 848 #424
-    height: 480 #240
+    width: 424 #424
+    height: 240 #240
     framerate: 30
   tracking: # T265 Camera Setting (Optional)
     enabled:  false # Leave as false if you don't want to stream T265 in parallel
