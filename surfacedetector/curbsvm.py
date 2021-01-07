@@ -407,6 +407,8 @@ def capture(config, video=None):
                     euler_t265 = get_pose_matrix(meta['ts'])
                     logging.info('euler_t265: %r', euler_t265)
 
+                # flag to write results
+                have_results = False
                 if config['show_polygon']:
                     # planes, obstacles, geometric_planes, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
                     planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
@@ -415,19 +417,23 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
+                    fname = config['playback']['file'].split('/')[1].split('.')[0]
+                    # dump(dict(first_plane=first_plane, second_plane=second_plane), f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
                     
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        square_points, normal_svm, center = hplane(first_plane, second_plane)
-                        dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
-                        plot_points(square_points, proj_mat, color_image, config)
-                        # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
+                        pass
+                        # square_points, normal_svm, center = hplane(first_plane, second_plane)
+                        # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                        # logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                        # plot_points(square_points, proj_mat, color_image, config)
+                        # have_results = True
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    print(planes)
+                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
@@ -436,9 +442,10 @@ def capture(config, video=None):
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
-                    cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    if have_results:
+                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     
