@@ -93,7 +93,9 @@ def fit_line(points, idx):
     coef = np.polyfit(points_[:, 0], points_[:, 1], 1, w=w)
     poly1d_fn = np.poly1d(coef)
     rmse = get_rmse(poly1d_fn, points_)
-    return dict(points=points_, fn=poly1d_fn, rmse=rmse)
+    dir_vec = np.array([coef[0], 1])
+    dir_vec = dir_vec / np.linalg.norm(dir_vec)
+    return dict(points=points_, fn=poly1d_fn, rmse=rmse, dir_vec=dir_vec, idx=[idx[0], last_idx])
 
 
 def extract_lines(pc, window_size=5, dot_min=0.83):
@@ -135,11 +137,49 @@ def plot_fit_lines(ax, fit_lines):
         ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
 
 
+def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90):
+    merged_lines = []
+    i = 0
+    last_line_added = False
+    while i < (len(lines) - 1):
+        line = lines[i]
+        line_next = lines[i + 1]
+        idx_diff = line_next['idx'][0] -  line['idx'][1]
+        dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
+        # print(line['dir_vec'], line_next['dir_vec'], dot_prod)
+        if idx_diff < max_idx_dist and dot_prod > min_dot_prod:
+            # its possible these two line segments should be refit to make a new line
+            # combine points and refit
+            new_idx = [line['idx'][0], line_next['idx'][1]]
+            new_line = fit_line(points, new_idx)
+            new_line_dot_prod = np.dot(line['dir_vec'], new_line['dir_vec'])
+            # print("new line dot prod", new_line_dot_prod)
+            if new_line_dot_prod > min_dot_prod:
+                # new line still looks good! TODO RMSE check as well?
+                merged_lines.append(new_line)
+                if i == (len(lines) - 2):
+                    # print("marked true")
+                    last_line_added = True
+                i += 1
+            else:
+                merged_lines.append(line)
+        else:
+            # lines should not be merged, very different
+            # print("not mergin line", i)
+            merged_lines.append(line)
+        i += 1
+    if not last_line_added:
+        merged_lines.append(lines[-1])
+
+    return merged_lines
+
 def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
     top_points_2d = rotate_data_planar(top_points, top_normal)[:, :2]
     all_fit_lines = extract_lines(top_points_2d)
+
+    best_fit_lines = merge_lines(top_points_2d, all_fit_lines)
     best_fit_lines = [
-        fit_line for fit_line in all_fit_lines if fit_line['points'].shape[0] >= min_points_line]
+        fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
     return top_points_2d, all_fit_lines, best_fit_lines
 
 
@@ -174,17 +214,20 @@ def process(data):
 
     top_plane = choose_plane(data)
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
-    visualize_3d(top_points)
-    # t1 = time.perf_counter()
-    filtered_top_points = filter_points(top_points)
-    # t2 = time.perf_counter()
+    # visualize_3d(top_points)
+    t1 = time.perf_counter()
+    filtered_top_points = filter_points(top_points) # < 500 us
+    # extract_lines_wrapper(top_points, top_normal) # ~ 2-5ms
+    t2 = time.perf_counter()
     # print(t1-t2)
     visualize_2d(filtered_top_points, top_normal)
 
-
 def main():
     files = get_files()
-    for f in files:
+    for idx, f in enumerate(files):
+        if idx < 18:
+            continue
+        logging.info("Processing %s", f)
         data = load(f)
         process(data)
 
