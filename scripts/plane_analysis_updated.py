@@ -93,7 +93,8 @@ def fit_line(points, idx):
     coef = np.polyfit(points_[:, 0], points_[:, 1], 1, w=w)
     poly1d_fn = np.poly1d(coef)
     rmse = get_rmse(poly1d_fn, points_)
-    dir_vec = np.array([coef[0], 1])
+    run = 1 if points_[-1, 0] - points_[0, 0] > 0 else -1
+    dir_vec = np.array([run, coef[0] * run])
     dir_vec = dir_vec / np.linalg.norm(dir_vec)
     return dict(points=points_, fn=poly1d_fn, rmse=rmse, dir_vec=dir_vec, idx=[idx[0], last_idx])
 
@@ -137,46 +138,116 @@ def plot_fit_lines(ax, fit_lines):
         ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
 
 
-def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90):
-    merged_lines = []
+def orthogonal_distance(line_point, line_vec, points):
+    #vec =  (a - p) - ((a-p) * n)*n
+    # import ipdb; ipdb.set_trace()
+    line_offset = points - line_point
+    line_proj = line_offset @ line_vec
+    line_vec_array = np.ones((line_proj.shape[0], 2)) * line_vec
+    line_proj = np.multiply(line_vec_array, line_proj.reshape(line_proj.shape[0],1))
+    perf_offset = line_offset - line_proj
+    _, lengths = normalized(perf_offset)
+    median = np.median(lengths)
+    # print(lengths, median)
+    # get norm of vec
+    return median
+
+def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05):
+    idx_diff = line_next['idx'][0] -  line['idx'][1]
+    dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
+    logging.info("attempting to merge line %s with %s", i, i+1)
+    print(dot_prod)
+    # print(line['dir_vec'], line_next['dir_vec'], dot_prod)
+    if idx_diff < max_idx_dist and dot_prod > min_dot_prod:
+        # its possible these two line segments should be refit to make a new line
+        # combine points and refit
+        logging.info("idx and dir vec passed! attempting to merge line %s with %s", i, i+1)
+        new_idx = [line['idx'][0], line_next['idx'][1]]
+        new_line = fit_line(points, new_idx)
+        new_line_dot_prod = np.dot(line['dir_vec'], new_line['dir_vec'])
+        new_line_ortho_dist1 = orthogonal_distance(line['points'].mean(axis=0), line['dir_vec'], line_next['points'])
+        new_line_ortho_dist2 = orthogonal_distance(line_next['points'].mean(axis=0), line_next['dir_vec'], line['points'])
+        new_line_ortho_dist = np.mean([new_line_ortho_dist1, new_line_ortho_dist2])
+        # print("new line dot prod", new_line_dot_prod)
+        if new_line_dot_prod > min_dot_prod and new_line_ortho_dist < max_ortho_dist:
+            # new line still looks good! TODO RMSE check as well?
+            logging.info("Merging line %s with %s", i, i+1)
+            return True, new_line
+    return False, None
+
+
+def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05):
+    final_lines = []
     i = 0
     last_line_added = False
-    while i < (len(lines) - 1):
-        line = lines[i]
-        line_next = lines[i + 1]
-        idx_diff = line_next['idx'][0] -  line['idx'][1]
-        dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
-        # print(line['dir_vec'], line_next['dir_vec'], dot_prod)
-        if idx_diff < max_idx_dist and dot_prod > min_dot_prod:
-            # its possible these two line segments should be refit to make a new line
-            # combine points and refit
-            new_idx = [line['idx'][0], line_next['idx'][1]]
-            new_line = fit_line(points, new_idx)
-            new_line_dot_prod = np.dot(line['dir_vec'], new_line['dir_vec'])
-            # print("new line dot prod", new_line_dot_prod)
-            if new_line_dot_prod > min_dot_prod:
-                # new line still looks good! TODO RMSE check as well?
-                merged_lines.append(new_line)
-                if i == (len(lines) - 2):
-                    # print("marked true")
-                    last_line_added = True
+
+    temporary_merged_line = None
+    while i < (len(lines)):
+        if temporary_merged_line is None:
+            if i == (len(lines) - 1):
+                final_lines.append(lines[i])
+                break
+            line = lines[i]
+            line_next = lines[i + 1]
+
+        else:
+            line = temporary_merged_line
+            line_next = lines[i]
+
+        merged, new_line = check_merge_line(points, line, line_next, i, max_idx_dist, max_rmse, min_dot_prod, max_ortho_dist)
+        if merged:
+            i = i + 1 if temporary_merged_line else i + 2
+            temporary_merged_line = new_line
+        else:
+            if temporary_merged_line is None:
+                final_lines.append(line)
                 i += 1
             else:
-                merged_lines.append(line)
-        else:
-            # lines should not be merged, very different
-            # print("not mergin line", i)
-            merged_lines.append(line)
-        i += 1
-    if not last_line_added:
-        merged_lines.append(lines[-1])
+                final_lines.append(temporary_merged_line)
+                temporary_merged_line = None
+            
+        # idx_diff = line_next['idx'][0] -  line['idx'][1]
+        # dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
+        # logging.info("attempting to merge line %s with %s", i, i+1)
+        # print(dot_prod)
+        # # print(line['dir_vec'], line_next['dir_vec'], dot_prod)
+        # if idx_diff < max_idx_dist and dot_prod > min_dot_prod:
+        #     # its possible these two line segments should be refit to make a new line
+        #     # combine points and refit
+        #     logging.info("idx and dir vec passed! attempting to merge line %s with %s", i, i+1)
+        #     new_idx = [line['idx'][0], line_next['idx'][1]]
+        #     new_line = fit_line(points, new_idx)
+        #     new_line_dot_prod = np.dot(line['dir_vec'], new_line['dir_vec'])
+        #     new_line_ortho_dist1 = orthogonal_distance(line['points'].mean(axis=0), line['dir_vec'], line_next['points'])
+        #     new_line_ortho_dist2 = orthogonal_distance(line_next['points'].mean(axis=0), line_next['dir_vec'], line['points'])
+        #     new_line_ortho_dist = np.mean([new_line_ortho_dist1, new_line_ortho_dist2])
+        #     # print("new line dot prod", new_line_dot_prod)
+        #     if new_line_dot_prod > min_dot_prod and new_line_ortho_dist < max_ortho_dist:
+        #         # new line still looks good! TODO RMSE check as well?
+        #         logging.info("Merging line %s with %s", i, i+1)
+        #         merged_lines.append(new_line)
+        #         # TODO 
+        #         # need to handle that if the newly merged line is similar to the next line in the list
+        #         if i == (len(lines) - 2):
+        #             # print("marked true")
+        #             last_line_added = True
+        #         i += 1
+        #     else:
+        #         merged_lines.append(line)
+        # else:
+        #     # lines should not be merged, very different
+        #     # print("not mergin line", i)
+        #     merged_lines.append(line)
+        # i += 1
+    # if not last_line_added:
+    #     merged_lines.append(lines[-1])
 
-    return merged_lines
+    return final_lines
 
 def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
     top_points_2d = rotate_data_planar(top_points, top_normal)[:, :2]
     all_fit_lines = extract_lines(top_points_2d)
-
+    # print(all_fit_lines)
     best_fit_lines = merge_lines(top_points_2d, all_fit_lines)
     best_fit_lines = [
         fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
@@ -225,7 +296,7 @@ def process(data):
 def main():
     files = get_files()
     for idx, f in enumerate(files):
-        if idx < 18:
+        if idx < 40:
             continue
         logging.info("Processing %s", f)
         data = load(f)
