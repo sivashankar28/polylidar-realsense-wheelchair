@@ -99,7 +99,7 @@ def fit_line(points, idx):
     return dict(points=points_, fn=poly1d_fn, rmse=rmse, dir_vec=dir_vec, idx=[idx[0], last_idx])
 
 
-def extract_lines(pc, window_size=5, dot_min=0.83):
+def extract_lines(pc, window_size=3, dot_min=0.88):
 
     pc_shift = np.roll(pc, -1, axis=0)
     diff = pc_shift - pc
@@ -112,13 +112,15 @@ def extract_lines(pc, window_size=5, dot_min=0.83):
     y = uniform_filter1d(diff[:, 1], size=window_size)
     diff_smooth = np.column_stack((x, y))
 
-    diff_smooth, length = normalized(diff)
+    diff_smooth, length = normalized(diff_smooth)
     diff_smooth_shift = np.roll(diff_smooth, -1, axis=0)
     acos = np.einsum('ij, ij->i', diff_smooth, diff_smooth_shift)
-
+    # print(acos)
     mask = acos > dot_min
     np_diff = np.diff(np.hstack(([False], mask, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
+    # print(diff_smooth)
+    print(idx_pairs)
     # I can do a more robust line fitting estimation, but for now
     # just fit all the lines
     fit_lines = [fit_line(pc, idx) for idx in idx_pairs if idx[1] - idx[0] > 1]
@@ -205,7 +207,9 @@ def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, 
             else:
                 final_lines.append(temporary_merged_line)
                 temporary_merged_line = None
-            
+        
+    if temporary_merged_line:
+        final_lines.append(temporary_merged_line)
         # idx_diff = line_next['idx'][0] -  line['idx'][1]
         # dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
         # logging.info("attempting to merge line %s with %s", i, i+1)
@@ -296,7 +300,7 @@ def process(data):
 def main():
     files = get_files()
     for idx, f in enumerate(files):
-        if idx < 40:
+        if idx < 47:#40:
             continue
         logging.info("Processing %s", f)
         data = load(f)
