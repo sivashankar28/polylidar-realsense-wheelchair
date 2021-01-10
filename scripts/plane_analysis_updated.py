@@ -19,7 +19,7 @@ DATA_DIR = Path('./data/scratch_test')
 
 
 def get_files():
-    p = DATA_DIR.glob('*curbmodel2*')
+    p = DATA_DIR.glob('*curbmodel1*')
     files = sorted([x for x in p if x.is_file()])
     return files
 
@@ -102,8 +102,10 @@ def fit_line(points, idx, max_slope=2.0):
         x_points = y_points
         y_points = points_[:, 0]
 
+    # this is taking a lot of time
     coef = np.polyfit(x_points, y_points, 1, w=w)
     poly1d_fn = np.poly1d(coef)
+    # this too
     rmse = get_rmse(x_points, y_points, poly1d_fn)
 
     if flip_axis:
@@ -289,16 +291,16 @@ def process(data):
     # visualize_3d(top_points)
     t1 = time.perf_counter()
     filtered_top_points = filter_points(top_points)  # < 500 us
-    # extract_lines_wrapper(top_points, top_normal) # ~ 2-5ms
+    extract_lines_wrapper(top_points, top_normal) # ~ 2-5ms
     t2 = time.perf_counter()
-    # print(t1-t2)
-    visualize_2d(filtered_top_points, top_normal)
+    print(t1-t2)
+    # visualize_2d(filtered_top_points, top_normal)
 
 
 def main():
     files = get_files()
     for idx, f in enumerate(files):
-        if idx < 51:  # 40:
+        if idx < 0:  # 40:
             continue
         logging.info("Processing %s", f)
         data = load(f)
