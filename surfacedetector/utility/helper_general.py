@@ -27,18 +27,25 @@ def _set_axes_radius(ax, origin, radius):
     ax.set_zlim3d([z - radius, z + radius])
 
 
-def rotate_data_planar(points, normal):
+def rotate_data_planar(points, normal, inverse=False):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         rm, _ = R.align_vectors([[0, 0, 1]], [normal])  # Rotating matrix the polygon
-    return rm.apply(points)
+    return rm.apply(points, inverse=inverse)
 
 
-def plot_points(ax, X, c=None):
+def plot_points(ax, X, c=None, is_line=False, linewidth=2):
+    a = [a.flatten() for a in np.split(X, X.shape[1], axis=1)]
     if c is not None:
-        ax.scatter(*np.split(X, X.shape[1], axis=1), c=c)
+        if is_line:
+            ax.plot(*a, c=c, linewidth=linewidth)
+        else:
+            ax.scatter(*a, c=c)
     else:
-        ax.scatter(*np.split(X, X.shape[1], axis=1))
+        if is_line:
+            ax.plot(*a, linewidth=linewidth)
+        else:
+            ax.scatter(*a)
 
 def setup_figure_3d():
     fig, ax_ = plt.subplots(nrows=1, ncols=1, subplot_kw=dict(projection='3d'))
