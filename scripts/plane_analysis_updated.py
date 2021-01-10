@@ -1,6 +1,8 @@
 from mpl_toolkits.mplot3d import Axes3D
+from itertools import combinations 
 from scipy.ndimage.filters import uniform_filter1d
 from scipy.spatial.transform import Rotation as R
+from scipy.stats import linregress
 from joblib import load
 import numpy as np
 from sklearn import svm
@@ -43,31 +45,13 @@ def filter_points(top_points, max_z=0.5, max_dist=0.05):
     far_z = nearest_z + max_z
     a1 = top_points_simplified[:, 2] < far_z
 
-    # fig, ax = setup_figure_3d()
-    # colors = np.ones((top_points.shape[0]))
-    # colors[a1] = 0
-    # plot_points(ax, top_points, c=colors)
-    # ax.set_box_aspect([1,1,1]) # IMPORTANT - this is the new, key line
-    # set_axes_equal(ax) # IMPORTANT - this is also required
-    # plt.show()
     np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
     great_idx = np.diff(idx_pairs, axis=1).argmax()
     start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
-    # print(a1)
-    # print(np_diff)
-    # print(idx_pairs)
-    # print(start_idx, end_idx)
-    # print(a1[start_idx], a1[end_idx])
+
     filtered_top_points = top_points_simplified[start_idx:end_idx, :]
     # need to roll it such that the jump starts on the first index
-    # TODO you need to check if end_ind
-
-    # fig, ax = setup_figure_3d()
-    # plot_points(ax, filtered_top_points)
-    # ax.set_box_aspect([1,1,1]) # IMPORTANT - this is the new, key line
-    # set_axes_equal(ax) # IMPORTANT - this is also required
-    # plt.show(
     return filtered_top_points
 
 
@@ -84,7 +68,16 @@ def get_rmse(x_points, y_points, fn):
     return np.sqrt(np.mean((predictions-targets)**2))
 
 
+class RegressedLine(object):
+    def __init__(self, m, b):
+        self.m = m
+        self.b = b
+    def __call__(self, X):
+        return self.m * X + self.b
+
 def fit_line(points, idx, max_slope=2.0):
+
+    t1 = time.perf_counter()
     last_idx = min(idx[1] + 1, points.shape[0])
     points_ = points[idx[0]:last_idx, :]
     w = np.ones(points_.shape[0])
@@ -101,13 +94,25 @@ def fit_line(points, idx, max_slope=2.0):
         flip_axis = True
         x_points = y_points
         y_points = points_[:, 0]
-
+    t2 = time.perf_counter()
     # this is taking a lot of time
     coef = np.polyfit(x_points, y_points, 1, w=w)
     poly1d_fn = np.poly1d(coef)
+    t3 = time.perf_counter()
+
+    # res = linregress(x_points, y_points)
+    # coef = [res.slope, res.intercept]
+    # poly1d_fn = RegressedLine(res.slope, res.intercept)
+
+
     # this too
     rmse = get_rmse(x_points, y_points, poly1d_fn)
+    t4 = time.perf_counter()
 
+    ms1 = (t2-t1) * 1000
+    ms2 = (t3-t2) * 1000
+    ms3 = (t4-t3) * 1000
+    logging.debug("Fit Line - Get Points: %.2f, Regress Line: %.2f, RMSE: %.2f", ms1, ms2, ms3)
     if flip_axis:
         run = 1 if x_points[-1] - x_points[0] > 0 else -1
         dir_vec = np.array([run * coef[0], run])
@@ -124,29 +129,44 @@ def fit_line(points, idx, max_slope=2.0):
 
 def extract_lines(pc, window_size=3, dot_min=0.88):
 
+    t1 = time.perf_counter()
     pc_shift = np.roll(pc, -1, axis=0)
     diff = pc_shift - pc
     diff_vec, length = normalized(diff)
     idx_max = np.argmax(length)
     assert idx_max != 0 or idx_max != length.shape[0] - \
         1, "LineString is not continuously connected"
-
+    t2 = time.perf_counter()
     x = uniform_filter1d(diff[:, 0], size=window_size)
     y = uniform_filter1d(diff[:, 1], size=window_size)
     diff_smooth = np.column_stack((x, y))
+    t3 = time.perf_counter()
 
     diff_smooth, length = normalized(diff_smooth)
     diff_smooth_shift = np.roll(diff_smooth, -1, axis=0)
     acos = np.einsum('ij, ij->i', diff_smooth, diff_smooth_shift)
+    t4 = time.perf_counter()
     # print(acos)
     mask = acos > dot_min
     np_diff = np.diff(np.hstack(([False], mask, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
+
+    t5 = time.perf_counter()
     logging.debug("IDX Pairs %s", (idx_pairs))
+    # print(idx_pairs)
     # print(diff_smooth)
     # I can do a more robust line fitting estimation, but for now
     # just fit all the lines
     fit_lines = [fit_line(pc, idx) for idx in idx_pairs if idx[1] - idx[0] > 1]
+    t6 = time.perf_counter()
+
+
+    ms1 = (t2-t1) * 1000
+    ms2 = (t3-t2) * 1000
+    ms3 = (t4-t3) * 1000
+    ms4 = (t5-t4) * 1000
+    ms5 = (t6-t5) * 1000
+    # print(ms1, ms2, ms3, ms4, ms5)
     # print(fit_lines)
 
     # print(diff)
@@ -165,6 +185,9 @@ def plot_fit_lines(ax, fit_lines):
         else:  
             points = fit_line['points']
             ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
+        mean = fit_line['points'].mean(axis=0)
+        ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]) )
+        
 
 
 def orthogonal_distance(line_point, line_vec, points):
@@ -246,14 +269,40 @@ def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, 
 
     return final_lines
 
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
+    if len(best_fit_lines) <= 2:
+        return best_fit_lines
+    else:
+        best_metric = 0.0
+        best_pair = []
+        max_line_length = float(max([line['points'].shape[0] for line in best_fit_lines]))
+        all_line_set = combinations(best_fit_lines, 2)
+        for line1, line2 in all_line_set:
+            dot_prod = abs(np.dot(line1['dir_vec'], line2['dir_vec']))
+            length = ((line1['points'].shape[0] + line2['points'].shape[0]) / 2.0) / max_line_length
+            metric = w1 * (1 - dot_prod) + w2 * length
+            # print(dot_prod, length, metric)
+            if metric > best_metric and dot_prod < np.abs(max_dot):
+                best_pair = [line1, line2]
+                best_metric = metric
+        return best_pair
 
 def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
+    t1 = time.perf_counter()
     top_points_2d = rotate_data_planar(top_points, top_normal)[:, :2]
+    t2 = time.perf_counter()
     all_fit_lines = extract_lines(top_points_2d)
+    t3 = time.perf_counter()
     # print(all_fit_lines)
     best_fit_lines = merge_lines(top_points_2d, all_fit_lines)
+    t4 = time.perf_counter()
+    ms1 = (t2-t1) * 1000
+    ms2 = (t3-t2) * 1000
+    ms3 = (t4-t3) * 1000
+    logging.debug("Extract lines Wrapper - Rotate: %.2f, Extract Lines: %.2f, Merge Lines: %.2f", ms1, ms2, ms3)
     best_fit_lines = [
         fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
+    best_fit_lines = filter_lines(best_fit_lines)
     return top_points_2d, all_fit_lines, best_fit_lines
 
 
@@ -290,21 +339,30 @@ def process(data):
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
     # visualize_3d(top_points)
     t1 = time.perf_counter()
-    filtered_top_points = filter_points(top_points)  # < 500 us
-    extract_lines_wrapper(top_points, top_normal) # ~ 2-5ms
+    filtered_top_points = filter_points(top_points)  # <100 us
     t2 = time.perf_counter()
-    print(t1-t2)
     # visualize_2d(filtered_top_points, top_normal)
+    extract_lines_wrapper(filtered_top_points, top_normal) # ~2ms
+    t3 = time.perf_counter()
+    ms1 = (t2-t1) * 1000
+    ms2 = (t3-t2) * 1000
+    ms = ms1 + ms2
+    logging.debug("Process Points - Filter and Simplify: %.2f, Extract Lines: %.2f", ms1, ms2)
+    # print(ms)
+    return ms
 
 
 def main():
     files = get_files()
+    all_time = []
     for idx, f in enumerate(files):
         if idx < 0:  # 40:
             continue
         logging.info("Processing %s", f)
         data = load(f)
-        process(data)
+        ms = process(data)
+        all_time.append(ms)
+    logging.info("Mean Time %.2f", np.mean(all_time))
 
 
 if __name__ == "__main__":
