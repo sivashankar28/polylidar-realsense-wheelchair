@@ -3,6 +3,13 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import warnings
 
+
+def normalized(a, axis=-1, order=2):
+    """Normalizes a numpy array of points"""
+    l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
+    l2[l2 == 0] = 1
+    return a / np.expand_dims(l2, axis), l2
+
 # Functions from @Mateen Ulhaq and @karlo
 def set_axes_equal(ax: plt.Axes):
     """Set 3D plot axes to equal scale.
