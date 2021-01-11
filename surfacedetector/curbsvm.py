@@ -30,6 +30,7 @@ from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshe
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
 from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane, get_theta_and_distance
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points
 
 logging.basicConfig(level=logging.INFO)
 
@@ -422,17 +423,21 @@ def capture(config, video=None):
                     
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        pass
+                        top_plane = choose_plane(first_plane, second_plane)
+                        top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
+                        filtered_top_points = filter_points(top_points)  # <100 us
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal)
+                        dist, theta = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal']
+                        )
                         # square_points, normal_svm, center = hplane(first_plane, second_plane)
                         # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                        # logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
-                        # plot_points(square_points, proj_mat, color_image, config)
-                        # have_results = True
+                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                        plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
+                        have_results = True
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    print(planes)
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()

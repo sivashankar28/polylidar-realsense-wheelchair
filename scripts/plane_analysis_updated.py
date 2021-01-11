@@ -1,21 +1,14 @@
-from mpl_toolkits.mplot3d import Axes3D
-from itertools import combinations
-from scipy.ndimage.filters import uniform_filter1d
 from scipy.spatial.transform import Rotation as R
-from scipy.stats import linregress
 from joblib import load
 import numpy as np
-from sklearn import svm
 import matplotlib.pyplot as plt
-from surfacedetector.utility.helper_general import set_axes_equal, rotate_data_planar, plot_points, setup_figure_2d, setup_figure_3d
-from simplifyline import simplify_line_2d, MatrixDouble, simplify_radial_dist_2d, simplify_radial_dist_3d
-from os import path
+from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d
 from pathlib import Path
 import logging
 import time
 
 
-from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points
+from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points, choose_plane
 
 logging.basicConfig(level=logging.INFO)
 
@@ -24,7 +17,7 @@ DATA_DIR = Path('./data/scratch_test')
 
 
 def get_files():
-    p = DATA_DIR.glob('*curbmodel2*')
+    p = DATA_DIR.glob('*curbmodel_*')
     files = sorted([x for x in p if x.is_file()])
     return files
 
@@ -69,25 +62,10 @@ def visualize_2d(top_points, top_normal, min_points_line=6):
     plot_fit_lines(ax[1], best_fit_lines)
     plt.show()
 
-
-def choose_plane(data):
-    first_centroid = data['first_plane']['point']
-    second_centroid = data['second_plane']['point']
-    first_normal = data['first_plane']['normal_ransac']
-
-    proj_first = np.dot(first_centroid, first_normal)
-    proj_second = np.dot(second_centroid, first_normal)
-
-    if proj_second < proj_first:
-        return data['second_plane']
-    else:
-        return data['first_plane']
-
-
 def process(data):
     """ Process the bottom and top planes dictionary """
 
-    top_plane = choose_plane(data)
+    top_plane = choose_plane(data['first_plane'], data['second_plane'])
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
     # visualize_3d(top_points)
     t1 = time.perf_counter()
@@ -102,7 +80,7 @@ def process(data):
     ms = ms1 + ms2
     logging.debug(
         "Process Points - Filter and Simplify: %.2f, Extract Lines: %.2f", ms1, ms2)
-    # visualize_3d(top_points, line_1=best_fit_lines[0]['points_3d'])
+    # visualize_3d(top_points, second_points_rot=best_fit_lines[0]['square_points'], line_1=best_fit_lines[0]['points_3d'])
     return ms
 
 

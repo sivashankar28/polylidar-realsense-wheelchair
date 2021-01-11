@@ -7,6 +7,23 @@ from scipy.ndimage.filters import uniform_filter1d
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
 
+
+
+
+def choose_plane(first_plane, second_plane):
+    first_centroid = first_plane['point']
+    second_centroid = second_plane['point']
+    first_normal = first_plane['normal_ransac']
+
+    proj_first = np.dot(first_centroid, first_normal)
+    proj_second = np.dot(second_centroid, first_normal)
+
+    if proj_second < proj_first:
+        return second_plane
+    else:
+        return first_plane
+
+
 def filter_points(top_points, max_z=0.5, max_dist=0.05):
     """Filters and simplifies 3D points belonging to a continuos line string.
 
@@ -109,7 +126,7 @@ def fit_line(points, idx, max_slope=2.0):
     return res
 
 
-def extract_lines(pc, window_size=3, dot_min=0.88, **kwargs):
+def extract_lines(pc, window_size=3, dot_min=0.90, **kwargs):
     """Extract a first approximation of all lines in 2D line string
 
     Args:
@@ -269,11 +286,11 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
     Returns:
         [type]: [description]
     """
+    best_pair = []
     if len(best_fit_lines) <= 2:
-        return best_fit_lines
+        best_pair =  best_fit_lines
     else:
         best_metric = 0.0
-        best_pair = []
         max_line_length = float(
             max([line['points'].shape[0] for line in best_fit_lines]))
         all_line_set = combinations(best_fit_lines, 2)
@@ -285,7 +302,29 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
             if metric > best_metric and dot_prod < np.abs(max_dot):
                 best_pair = [line1, line2]
                 best_metric = metric
-        return best_pair
+    for line in best_pair:
+        line['distance'] = np.linalg.norm(line['hplane_point'])
+    
+    return sorted(best_pair, key = lambda i: i['distance'])
+
+def make_square(cent, ax1, ax2, normal, w=0.5, h=0.25):
+    p1 = cent - w * ax2 
+    p2 = cent + w * ax2
+    p3 = cent + h * ax1 + w * ax2 
+    p4 = cent + h * ax1 - w * ax2
+    points = np.array([p1, p2, p3, p4])
+    # projected_points = project_points_geometric_plane(points, normal, cent)
+    projected_points = points
+    return projected_points
+
+def project_points_geometric_plane(points, normal, point_on_plane):
+    diff = points - point_on_plane
+    dist = np.dot(diff, normal)
+    scaled_vector = normal*dist[:,np.newaxis]
+    # import ipdb; ipdb.set_trace()
+    projected_points = points - scaled_vector
+    
+    return projected_points
 
 
 def recover_3d_lines(best_fit_lines, top_normal, height):
@@ -293,6 +332,15 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
         pts = line['points']
         line['points_3d'] = np.append(pts, np.ones((pts.shape[0], 1)) * height, axis=1)
         line['points_3d'] = rotate_data_planar(line['points_3d'], top_normal, True)
+        line['dir_vec_3d'] = np.array([[line['dir_vec'][0], line['dir_vec'][1], 0]])
+        line['dir_vec_3d'] = rotate_data_planar(line['dir_vec_3d'], top_normal, True).flatten()
+        line['dir_vec_3d'] = line['dir_vec_3d'] / np.linalg.norm(line['dir_vec_3d'])
+        line['plane_normal'] = top_normal
+        line['hplane_normal'] = np.cross(line['dir_vec_3d'], line['plane_normal'])
+        line['hplane_normal'] = line['hplane_normal'] / np.linalg.norm(line['hplane_normal'])
+        line['hplane_point'] = line['points_3d'].mean(axis=0)
+        line['square_points'] = make_square(line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
+
     return best_fit_lines
 
 def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
@@ -313,7 +361,13 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
         "Extract lines Wrapper - Rotate: %.2f, Extract Lines: %.2f, Merge Lines: %.2f", ms1, ms2, ms3)
     best_fit_lines = [
         fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
-    best_fit_lines = filter_lines(best_fit_lines)
     best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
+    best_fit_lines = filter_lines(best_fit_lines)
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
+
+
+
+# Need square points
+# need a centerish point on the plane
+# need the normal of the geometric seperating plane
