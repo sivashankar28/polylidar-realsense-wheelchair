@@ -63,7 +63,7 @@ def setup_figure_3d():
     return fig, ax_
 
 def setup_figure_2d():
-    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(17, 5))
     for ax_ in ax:
         ax_.set_xlabel("X")
         ax_.set_ylabel("Y")

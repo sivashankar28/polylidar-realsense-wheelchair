@@ -8,7 +8,7 @@ import logging
 import time
 
 
-from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points, choose_plane
+from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points, choose_plane, rotate_data_planar
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,7 +17,7 @@ DATA_DIR = Path('./data/scratch_test')
 
 
 def get_files():
-    p = DATA_DIR.glob('*curbmodel_*')
+    p = DATA_DIR.glob('*curbmodel2_*')
     files = sorted([x for x in p if x.is_file()])
     return files
 
@@ -37,7 +37,7 @@ def visualize_3d(first_points_rot, second_points_rot=None, line_1=None):
 
 
 
-def plot_fit_lines(ax, fit_lines):
+def plot_fit_lines(ax, fit_lines, annotate=True):
     next(ax._get_lines.prop_cycler)
     for fit_line in fit_lines:
         poly1d_fn = fit_line['fn']
@@ -47,19 +47,21 @@ def plot_fit_lines(ax, fit_lines):
             points = fit_line['points']
             ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
         mean = fit_line['points'].mean(axis=0)
-        ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
+        if annotate:
+            ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
 
 
 
-def visualize_2d(top_points, top_normal, min_points_line=6):
-    top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
-        top_points, top_normal, min_points_line)
+def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
+    # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
+    #     top_points, top_normal, min_points_line)
     fig, ax = setup_figure_2d()
-    plot_points(ax[0], top_points_2d)
+    plot_points(ax[0], top_points_raw)
+    plot_points(ax[1], top_points_2d)
     for i in range(top_points_2d.shape[0]):
-        ax[0].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
-    plot_fit_lines(ax[0], all_fit_lines)
-    plot_fit_lines(ax[1], best_fit_lines)
+        ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
+    plot_fit_lines(ax[1], all_fit_lines, annotate=False)
+    plot_fit_lines(ax[2], best_fit_lines)
     plt.show()
 
 def process(data):
@@ -71,9 +73,9 @@ def process(data):
     t1 = time.perf_counter()
     filtered_top_points = filter_points(top_points)  # <100 us
     t2 = time.perf_counter()
-    visualize_2d(filtered_top_points, top_normal)
-    _, height, _, best_fit_lines = extract_lines_wrapper(
+    top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
         filtered_top_points, top_normal)  # ~2ms
+    visualize_2d(rotate_data_planar(top_points, top_normal)[:, :2], top_points_2d, all_fit_lines, best_fit_lines)
     t3 = time.perf_counter()
     ms1 = (t2-t1) * 1000
     ms2 = (t3-t2) * 1000

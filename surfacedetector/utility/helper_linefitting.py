@@ -1,3 +1,24 @@
+"""Multi Line Fitting for Continuous Line Strings
+This module contains functions which takes a noisy 3D line string, that may have multiple straight paths, 
+and attempt to return geomerically lines to approximate those straight paths. The expectionion is that the 3D
+Line string is actually planar in some dimension (like a flat surface)
+For example, image a noisy square, 4 (3D) lines should be returned
+
+Process:
+1. Filter Points -  Uses a C++ module I created which first performs a form of line simplification
+                    Next, remove points which are two far away from a certian axis. Helps focus on nearby points to observer.
+                    The returned line is still continuous
+2. Rotate -         Rotate the 3D line such that the XY plane becomes aligned with the 3D plane
+3. Extract Lines -  Calculate the vectors for each line segment
+                    Perform smoothing on the these vectors using a rolling window
+                    Create continuous segments of points whose direction vectors are closely aligned
+                    Fit lines to these segments (carefully handle vertical lines)
+                    Filter out any lines which are too small
+4. Merge Lines  -   Merge lines which are close to eachother and which make a better fit. 
+                    Metrics such as the dot angle, and their orhtogonal distance form eachother are used
+                    to determine merging
+5. Filter Lines -   Optional. Only return the pair of lines which are most orthogonal to eachother.
+"""
 import time
 import logging
 from itertools import combinations
@@ -6,8 +27,6 @@ import numpy as np
 from scipy.ndimage.filters import uniform_filter1d
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
-
-
 
 
 def choose_plane(first_plane, second_plane):
@@ -50,7 +69,6 @@ def filter_points(top_points, max_z=0.5, max_dist=0.05):
     filtered_top_points = top_points_simplified[start_idx:end_idx, :]
     # need to roll it such that the jump starts on the first index
     return filtered_top_points
-
 
 
 def get_rmse(x_points, y_points, fn):
@@ -173,6 +191,7 @@ def extract_lines(pc, window_size=3, dot_min=0.90, **kwargs):
     # print(ms1, ms2, ms3, ms4, ms5)
     return fit_lines
 
+
 def orthogonal_distance(line_point, line_vec, points):
     """Computes Orthogonal distance between a line and points
 
@@ -292,9 +311,9 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
         # TODO RMSE and Length metric as well
         for line in best_fit_lines:
             line['distance'] = np.linalg.norm(line['hplane_point'])
-        return sorted(best_fit_lines, key = lambda i: i['distance'])[:1]
+        return sorted(best_fit_lines, key=lambda i: i['distance'])[:1]
     elif len(best_fit_lines) <= 2:
-        best_pair =  best_fit_lines
+        best_pair = best_fit_lines
     else:
         best_metric = 0.0
         max_line_length = float(
@@ -311,43 +330,64 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
     for line in best_fit_lines:
         line['distance'] = np.linalg.norm(line['hplane_point'])
 
-    return sorted(best_pair, key = lambda i: i['distance'])
+    return sorted(best_pair, key=lambda i: i['distance'])
+
 
 def make_square(cent, ax1, ax2, normal, w=0.3, h=0.25):
-    p1 = cent - w * ax2 
+    p1 = cent - w * ax2
     p2 = cent + w * ax2
-    p3 = cent + h * ax1 + w * ax2 
+    p3 = cent + h * ax1 + w * ax2
     p4 = cent + h * ax1 - w * ax2
     points = np.array([p1, p2, p3, p4])
     # projected_points = project_points_geometric_plane(points, normal, cent)
     projected_points = points
     return projected_points
 
+
 def project_points_geometric_plane(points, normal, point_on_plane):
     diff = points - point_on_plane
     dist = np.dot(diff, normal)
-    scaled_vector = normal*dist[:,np.newaxis]
+    scaled_vector = normal*dist[:, np.newaxis]
     # import ipdb; ipdb.set_trace()
     projected_points = points - scaled_vector
-    
+
     return projected_points
 
 
 def recover_3d_lines(best_fit_lines, top_normal, height):
+    """This will recover 3D information of the lines
+
+    Args:
+        best_fit_lines (List[dict]): List of lines
+        top_normal (ndarray): The normal of the plane which all lines are coplanar with
+        height (float): Height of the plane in z direction
+
+    Returns:
+        List[dict]: Same list, but augmented with more data
+    """
     for line in best_fit_lines:
         pts = line['points']
-        line['points_3d'] = np.append(pts, np.ones((pts.shape[0], 1)) * height, axis=1)
-        line['points_3d'] = rotate_data_planar(line['points_3d'], top_normal, True)
-        line['dir_vec_3d'] = np.array([[line['dir_vec'][0], line['dir_vec'][1], 0]])
-        line['dir_vec_3d'] = rotate_data_planar(line['dir_vec_3d'], top_normal, True).flatten()
-        line['dir_vec_3d'] = line['dir_vec_3d'] / np.linalg.norm(line['dir_vec_3d'])
+        line['points_3d'] = np.append(
+            pts, np.ones((pts.shape[0], 1)) * height, axis=1)
+        line['points_3d'] = rotate_data_planar(
+            line['points_3d'], top_normal, True)
+        line['dir_vec_3d'] = np.array(
+            [[line['dir_vec'][0], line['dir_vec'][1], 0]])
+        line['dir_vec_3d'] = rotate_data_planar(
+            line['dir_vec_3d'], top_normal, True).flatten()
+        line['dir_vec_3d'] = line['dir_vec_3d'] / \
+            np.linalg.norm(line['dir_vec_3d'])
         line['plane_normal'] = top_normal
-        line['hplane_normal'] = np.cross(line['dir_vec_3d'], line['plane_normal']) *  -1
-        line['hplane_normal'] = line['hplane_normal'] / np.linalg.norm(line['hplane_normal'])
+        line['hplane_normal'] = np.cross(
+            line['dir_vec_3d'], line['plane_normal']) * -1
+        line['hplane_normal'] = line['hplane_normal'] / \
+            np.linalg.norm(line['hplane_normal'])
         line['hplane_point'] = line['points_3d'].mean(axis=0)
-        line['square_points'] = make_square(line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
+        line['square_points'] = make_square(
+            line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
 
     return best_fit_lines
+
 
 def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
     t1 = time.perf_counter()
@@ -357,7 +397,6 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
     t2 = time.perf_counter()
     all_fit_lines = extract_lines(top_points_2d)
     t3 = time.perf_counter()
-    # print(all_fit_lines)
     best_fit_lines = merge_lines(top_points_2d, all_fit_lines)
     t4 = time.perf_counter()
     ms1 = (t2-t1) * 1000
@@ -372,8 +411,3 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 
-
-
-# Need square points
-# need a centerish point on the plane
-# need the normal of the geometric seperating plane
