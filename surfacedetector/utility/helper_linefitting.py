@@ -197,7 +197,7 @@ def orthogonal_distance(line_point, line_vec, points):
     return median
 
 
-def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05):
+def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05):
     idx_diff = line_next['idx'][0] - line['idx'][1]
     dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
     logging.debug("attempting to merge line %s with %s, dot_prod: %s, idx_diff: %s",
@@ -223,7 +223,7 @@ def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, m
     return False, None
 
 
-def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05, **kwargs):
+def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05, **kwargs):
     """Merges lines that may be close to eachother
 
     Args:
@@ -271,7 +271,7 @@ def merge_lines(points, lines, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.90, 
     return final_lines
 
 
-def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=False, **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
     If multiple paris can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
@@ -287,7 +287,13 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
         [type]: [description]
     """
     best_pair = []
-    if len(best_fit_lines) <= 2:
+    if return_only_one_line and best_fit_lines:
+        # only retrun one line, choose the closest line
+        # TODO RMSE and Length metric as well
+        for line in best_fit_lines:
+            line['distance'] = np.linalg.norm(line['hplane_point'])
+        return sorted(best_fit_lines, key = lambda i: i['distance'])[:1]
+    elif len(best_fit_lines) <= 2:
         best_pair =  best_fit_lines
     else:
         best_metric = 0.0
@@ -302,12 +308,12 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25):
             if metric > best_metric and dot_prod < np.abs(max_dot):
                 best_pair = [line1, line2]
                 best_metric = metric
-    for line in best_pair:
+    for line in best_fit_lines:
         line['distance'] = np.linalg.norm(line['hplane_point'])
-    
+
     return sorted(best_pair, key = lambda i: i['distance'])
 
-def make_square(cent, ax1, ax2, normal, w=0.5, h=0.25):
+def make_square(cent, ax1, ax2, normal, w=0.3, h=0.25):
     p1 = cent - w * ax2 
     p2 = cent + w * ax2
     p3 = cent + h * ax1 + w * ax2 
@@ -336,14 +342,14 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
         line['dir_vec_3d'] = rotate_data_planar(line['dir_vec_3d'], top_normal, True).flatten()
         line['dir_vec_3d'] = line['dir_vec_3d'] / np.linalg.norm(line['dir_vec_3d'])
         line['plane_normal'] = top_normal
-        line['hplane_normal'] = np.cross(line['dir_vec_3d'], line['plane_normal'])
+        line['hplane_normal'] = np.cross(line['dir_vec_3d'], line['plane_normal']) *  -1
         line['hplane_normal'] = line['hplane_normal'] / np.linalg.norm(line['hplane_normal'])
         line['hplane_point'] = line['points_3d'].mean(axis=0)
         line['square_points'] = make_square(line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
 
     return best_fit_lines
 
-def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
+def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
@@ -362,7 +368,7 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6):
     best_fit_lines = [
         fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
     best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
-    best_fit_lines = filter_lines(best_fit_lines)
+    best_fit_lines = filter_lines(best_fit_lines, **kwargs)
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 

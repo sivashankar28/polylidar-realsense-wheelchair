@@ -3,7 +3,7 @@
   advanced: "" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
     enabled: true    # Only activate playback if this is true
-    file: "data/curbmodel.bag"
+    file: "data/curbmodel2.bag"
     # file: "data/20200806_190236.bag"
     # file: "data/20200618_081754.bag"
     repeat: false     # repeat bag after its over
@@ -49,7 +49,7 @@
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns
     filter:
-      loops_laplacian: 1 # how many iterations
+      loops_laplacian: 2 # how many iterations
       _lambda: 1.0 # weight factor for laplacian update
       kernel_size: 3 # only changes for laplacian
       loops_bilateral: 3 # how many iterations

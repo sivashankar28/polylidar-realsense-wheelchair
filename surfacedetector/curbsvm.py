@@ -426,14 +426,20 @@ def capture(config, video=None):
                         top_plane = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
-                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal)
-                        dist, theta = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal']
-                        )
-                        # square_points, normal_svm, center = hplane(first_plane, second_plane)
-                        # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
-                        plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
-                        have_results = True
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
+                        if best_fit_lines:
+                            dist, theta = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal']
+                            )
+                            # square_points, normal_svm, center = hplane(first_plane, second_plane)
+                            # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                            logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                            plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
+                            if len(best_fit_lines) > 1:
+                                # pass
+                                plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
+                            have_results = True
+                        else:
+                            logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
                     # sys.exit()
