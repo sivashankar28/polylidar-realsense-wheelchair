@@ -1,4 +1,3 @@
-import serial
 import logging
 import sys
 import argparse
@@ -16,10 +15,12 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import open3d as o3d
 import pandas as pd
+import serial
 from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -31,6 +32,7 @@ from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshe
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
 from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane, get_theta_and_distance
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,7 +49,7 @@ IDENTITY_MAT = MatrixDouble(IDENTITY)
 
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-# ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+
 
 def create_pipeline(config: dict):
     """Sets up the pipeline to extract depth and rgb frames
@@ -408,6 +410,8 @@ def capture(config, video=None):
                     euler_t265 = get_pose_matrix(meta['ts'])
                     logging.info('euler_t265: %r', euler_t265)
 
+                # flag to write results
+                have_results = False
                 if config['show_polygon']:
                     # planes, obstacles, geometric_planes, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
                     planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
@@ -416,23 +420,40 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
-                    
+                    fname = config['playback']['file'].split('/')[1].split('.')[0]
+                    # dump(dict(first_plane=first_plane, second_plane=second_plane), f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
                     
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        square_points, normal_svm, center = hplane(first_plane, second_plane)
-                        dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
-                        plot_points(square_points, proj_mat, color_image, config)
-                        # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
+                        top_plane = choose_plane(first_plane, second_plane)
+                        top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
+                        filtered_top_points = filter_points(top_points)  # <100 us
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
+                        if best_fit_lines:
+                            dist, theta = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal']
+                            )
+
+                            # square_points, normal_svm, center = hplane(first_plane, second_plane)
+                            # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                            logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                            plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
+                            if len(best_fit_lines) > 2: 
+                                # pass (Experiment with the above^ 1 vs 2)
+                                plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
+                            have_results = True
+                        else:
+                            logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    # ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta)+ "\n").encode())
-                    # ser.write(("{:.2f}".format(dist)+"\n").encode())
+                    if theta < 0:
+                        thetasign = 0
+                    else:
+                        thetasign = 1
+                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(abs(theta))+ str(thetasign) + "\n").encode())
                     # ser.write(("{:.2f}".format(theta)+"\n").encode())
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
@@ -441,9 +462,10 @@ def capture(config, video=None):
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
-                    cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    if have_results:
+                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     
@@ -473,9 +495,9 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f; Curb Height: %.2f",
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f",
                 #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
+                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'])
                 logging.info(f"Curb Height: %.2f", curb_height)
                 
             except Exception as e:
@@ -500,7 +522,7 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
-            # ser.flush()
+            ser.flush()
             # Run capture loop
             capture(config, args.video)
         except yaml.YAMLError as exc:

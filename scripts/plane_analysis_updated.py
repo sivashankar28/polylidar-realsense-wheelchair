@@ -17,7 +17,7 @@ DATA_DIR = Path('./data/scratch_test')
 
 
 def get_files():
-    p = DATA_DIR.glob('*curbmodel2_*')
+    p = DATA_DIR.glob('*planes*')
     files = sorted([x for x in p if x.is_file()])
     return files
 
@@ -69,7 +69,7 @@ def process(data):
 
     top_plane = choose_plane(data['first_plane'], data['second_plane'])
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
-    # visualize_3d(top_points)
+    visualize_3d(top_points)
     t1 = time.perf_counter()
     filtered_top_points = filter_points(top_points)  # <100 us
     t2 = time.perf_counter()
@@ -82,7 +82,7 @@ def process(data):
     ms = ms1 + ms2
     logging.debug(
         "Process Points - Filter and Simplify: %.2f, Extract Lines: %.2f", ms1, ms2)
-    # visualize_3d(top_points, second_points_rot=best_fit_lines[0]['square_points'], line_1=best_fit_lines[0]['points_3d'])
+    visualize_3d(top_points, second_points_rot=best_fit_lines[0]['square_points'], line_1=best_fit_lines[0]['points_3d'])
     return ms
 
 

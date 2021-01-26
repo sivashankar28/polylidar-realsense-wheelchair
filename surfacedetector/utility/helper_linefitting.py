@@ -14,10 +14,10 @@ Process:
                     Create continuous segments of points whose direction vectors are closely aligned
                     Fit lines to these segments (carefully handle vertical lines)
                     Filter out any lines which are too small
-4. Merge Lines  -   Merge lines which are close to eachother and which make a better fit. 
+4. Merge Lines  -   Merge lines which are close to each other and which make a better fit. 
                     Metrics such as the dot angle, and their orhtogonal distance form eachother are used
                     to determine merging
-5. Filter Lines -   Optional. Only return the pair of lines which are most orthogonal to eachother.
+5. Filter Lines -   Optional. Only return the pair of lines which are most orthogonal to each other.
 """
 import time
 import logging
@@ -243,7 +243,7 @@ def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, m
 
 
 def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05, **kwargs):
-    """Merges lines that may be close to eachother
+    """Merges lines that may be close to each other
 
     Args:
         points (ndarray): Original 2D Point Line String
@@ -292,7 +292,7 @@ def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, 
 
 def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=False, **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
-    If multiple paris can be found, find the one that maximizes:
+    If multiple pairs can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
     Basically the pair of line strings that are the longest and most orthogonal
 
@@ -300,7 +300,7 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
         best_fit_lines (List): List of Lines
         max_dot (float, optional): Max dot prodcut if more than two lines. Defaults to 0.2.
         w1 (float, optional): Weight of dot product. Defaults to 0.75.
-        w2 (float, optional): Weight of Line Lenght. Defaults to 0.25.
+        w2 (float, optional): Weight of Line Lenght. Defaults to 0.25
 
     Returns:
         [type]: [description]
@@ -331,7 +331,6 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
         line['distance'] = np.linalg.norm(line['hplane_point'])
 
     return sorted(best_pair, key=lambda i: i['distance'])
-
 
 def make_square(cent, ax1, ax2, normal, w=0.3, h=0.25):
     p1 = cent - w * ax2

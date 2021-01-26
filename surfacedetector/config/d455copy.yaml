@@ -14,13 +14,13 @@
   show_images: true
   show_polygon: true
   color: # RGB Camera Settings
-    width: 424  #424
-    height: 240 #240
-    framerate: 30
+    width: 848  #424
+    height: 480 #240
+    framerate: 60
   depth: # Depth Camera Settings
-    width: 424 #424
-    height: 240 #240
-    framerate: 30
+    width: 848 #424
+    height: 480 #240
+    framerate: 60
   tracking: # T265 Camera Setting (Optional)
     enabled:  true # Leave as false if you don't want to stream T265 in parallel
     playback: # If desire playback with tracking then point to the bag file for the T265
@@ -30,12 +30,12 @@
   filters: # Any realsense filters you wish to apply
     decimation:
       active: true
-      magnitude: 2 # can be 2, 4, 8
+      magnitude: 4 # can be 2, 4, 8
     temporal:
       active: true
       smooth_alpha: 0.4 # the weight with default value 0.4, between 1 and 0 -- 1 means 100% weight from the current pixel
-      smooth_delta: 70.0 # the filter threshold for edge classification and preserving with default value of 20 depth increments
-      persistence_control: 2 # 0 = disabled , 1 = Valid in 8/8, 2 = Valid in 2/last 3
+      smooth_delta: 40.0 # the filter threshold for edge classification and preserving with default value of 20 depth increments
+      persistence_control: 1 # 0 = disabled , 1 = Valid in 8/8, 2 = Valid in 2/last 3
     spatial:
       active: false
       smooth_alpha: 0.235 # The weight of the current pixel for smoothing is bounded within [25..100]%
@@ -44,12 +44,12 @@
       hole_fill: 1 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
     threshold:
       active: true
-      distance: 8 # any pixel greater than x is removed
+      distance: 3.0 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns
     filter:
-      loops_laplacian: 2 # how many iterations
+      loops_laplacian: 6 # how many iterations
       _lambda: 1.0 # weight factor for laplacian update
       kernel_size: 3 # only changes for laplacian
       loops_bilateral: 3 # how many iterations
@@ -57,8 +57,8 @@
       sigma_angle: 0.25 # std of distance between triangles normals
   polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
     alpha: 0.0 # must be set to 0.0 if using lmax
-    lmax: 0.05 # maximum distance between points in plane for spatial connection
-    z_thresh: 0.15 # enforce point to plane distance constraints during region growing.
+    lmax: 0.10 # maximum distance between points in plane for spatial connection
+    z_thresh: 0.20 # enforce point to plane distance constraints during region growing.
     norm_thresh: 0.95 # Not used, set to the same as norm_thresh_min. Will deprecate later.
     norm_thresh_min: 0.95 # triangles must have a minimum amount of planarity.
     min_hole_vertices : 10 # minimum number of vertices in a hole to return
