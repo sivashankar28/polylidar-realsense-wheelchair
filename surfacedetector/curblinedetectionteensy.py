@@ -453,7 +453,7 @@ def capture(config, video=None):
                     # ser.write(("{:.2f}".format(theta)+"\n").encode())
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images

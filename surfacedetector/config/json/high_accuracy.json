@@ -15,7 +15,7 @@
     "aux-param-depthclampmax": "65535",
     "aux-param-depthclampmin": "0",
     "aux-param-disparityshift": "0",
-    "controls-autoexposure-auto": "False",
+    "controls-autoexposure-auto": "True",
     "controls-autoexposure-manual": "8500",
     "controls-color-autoexposure-auto": "True",
     "controls-color-autoexposure-manual": "156",
@@ -87,7 +87,7 @@
     "param-usersm": "1",
     "param-zunits": "1000",
     "stream-depth-format": "Z16",
-    "stream-fps": "30",
+    "stream-fps": "60",
     "stream-height": "480",
-    "stream-width": "640"
+    "stream-width": "848"
 }

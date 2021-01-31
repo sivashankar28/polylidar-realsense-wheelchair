@@ -434,7 +434,7 @@ def capture(config, video=None):
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
                             logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
-                            if len(best_fit_lines) > 1: 
+                            if len(best_fit_lines) > 2: 
                                 # pass (Experiment with the above^ 1 vs 2)
                                 plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
                             have_results = True
@@ -444,7 +444,7 @@ def capture(config, video=None):
                         logging.warning("Couldn't find the street and sidewalk surface")
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
