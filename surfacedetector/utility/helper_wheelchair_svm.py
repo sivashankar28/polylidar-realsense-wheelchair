@@ -121,6 +121,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     diff = np.array([0.0,0.0,0.0]) - point_on_plane
     dist = np.dot(diff, plane_normal)
     dist = np.abs(dist)
+    
 
     vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
     vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))

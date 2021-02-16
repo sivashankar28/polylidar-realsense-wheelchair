@@ -1,6 +1,6 @@
 ---
   name: Default Settings for L515 extracting multiple surfaces using Polylidar3D
-  advanced: "surfacedetector/config/json/high_density.json" # JSON file path holding advanced settings
+  advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
     enabled: false   # Only activate playback if this is true
     file: "data/L515/curbascend.bag"
@@ -30,7 +30,7 @@
   filters: # Any realsense filters you wish to apply
     decimation:
       active: true
-      magnitude: 4 # can be 2, 4, 8
+      magnitude: 8 # can be 2, 4, 8
     temporal:
       active: true
       smooth_alpha: 1.0 # the weight with default value 0.4, between 1 and 0 -- 1 means 100% weight from the current pixel
@@ -54,7 +54,7 @@
       kernel_size: 3 # only changes for laplacian
       loops_bilateral: 1 # how many iterations
       sigma_length: 0.1 # std of distance between triangles centroids
-      sigma_angle: 0.10 # std of distance between triangles normals
+      sigma_angle: 0.05 # std of distance between triangles normals
   polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
     alpha: 0.0 # must be set to 0.0 if using lmax
     lmax: 0.15 # maximum distance between points in plane for spatial connection

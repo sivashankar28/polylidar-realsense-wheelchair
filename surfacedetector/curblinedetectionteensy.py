@@ -31,8 +31,8 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane, get_theta_and_distance
-from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points
+from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance
 
 logging.basicConfig(level=logging.INFO)
 
@@ -428,28 +428,25 @@ def capture(config, video=None):
                         top_plane = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
-                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            dist, theta = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal']
-                            )
+                            orthog_dist, distance1, angle1, orthog_ang = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal'])
 
-                            # square_points, normal_svm, center = hplane(first_plane, second_plane)
-                            # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, Angle 1: %.01f degrees, Orthog_Ang: %.01f degrees ", counter, orthog_dist, distance1, angle1, orthog_ang)
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
-                                # pass (Experiment with the above^ 1 vs 2)
+                                # pass 
                                 plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
                             have_results = True
                         else:
                             logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    if theta < 0:
-                        thetasign = 0
+                    if orthog_ang < 0:
+                        orthog_angsign = 0
                     else:
-                        thetasign = 1
-                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(abs(theta))+ str(thetasign) + "\n").encode())
+                        orthog_angsign = 1
+                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(distance1)+ "{:.2f}".format(abs(orthog_ang))+ str(orthog_angsign) + "{:.2f}".format(abs(angle1)) + ("\n").encode())
                     # ser.write(("{:.2f}".format(theta)+"\n").encode())
                     # sys.exit()
                     # Plot polygon in rgb frame

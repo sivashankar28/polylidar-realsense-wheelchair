@@ -20,6 +20,7 @@ Process:
 5. Filter Lines -   Optional. Only return the pair of lines which are most orthogonal to each other.
 """
 import time
+import math
 import logging
 from itertools import combinations
 
@@ -290,7 +291,7 @@ def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, 
     return final_lines
 
 
-def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=False, **kwargs):
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=True, **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
     If multiple pairs can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
@@ -298,7 +299,7 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
 
     Args:
         best_fit_lines (List): List of Lines
-        max_dot (float, optional): Max dot prodcut if more than two lines. Defaults to 0.2.
+        max_dot (float, optional): Max dot product if more than two lines. Defaults to 0.2.
         w1 (float, optional): Weight of dot product. Defaults to 0.75.
         w2 (float, optional): Weight of Line Lenght. Defaults to 0.25
 
@@ -307,12 +308,12 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
     """
     best_pair = []
     if return_only_one_line and best_fit_lines:
-        # only retrun one line, choose the closest line
+        # only return one line, choose the closest line
         # TODO RMSE and Length metric as well
         for line in best_fit_lines:
             line['distance'] = np.linalg.norm(line['hplane_point'])
         return sorted(best_fit_lines, key=lambda i: i['distance'])[:1]
-    elif len(best_fit_lines) <= 2:
+    elif len(best_fit_lines) <= 1:
         best_pair = best_fit_lines
     else:
         best_metric = 0.0
@@ -347,9 +348,7 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     diff = points - point_on_plane
     dist = np.dot(diff, normal)
     scaled_vector = normal*dist[:, np.newaxis]
-    # import ipdb; ipdb.set_trace()
     projected_points = points - scaled_vector
-
     return projected_points
 
 
@@ -410,3 +409,50 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 
+def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
+    """
+    This code calculates the angle and distance to the curb
+
+    'point_on_plane' = Centroid of red box
+    'plane_normal' or 'normal' = Normal of the red box
+    'ground_normal' = Normal of the ground plane
+    All data is in the reference frame of the camera
+    
+    """
+    wheelchair_center = np.array([-0.3, 0, 0])
+    #Add threshold in the y axis
+    point_on_plane = point_on_plane + np.array([0,0.5,0])
+    
+    diff = wheelchair_center - point_on_plane
+    # Orthogonal Distance to the hyerplane to the curb
+    orthog_dist = np.dot(diff, plane_normal)
+    orthog_dist = np.abs(orthog_dist)
+    #Coordinates of the wheelchair center and centroid of the box
+    points = np.array([wheelchair_center,point_on_plane])
+    #Coordinates projected with respect to the ground plane
+    points_proj = project_points_geometric_plane(points, ground_normal, np.array([0.0, 0.0, 0.0]))
+    #Calculate distance and angle between wheelchair center and centroid of the red box
+    distance1 = np.linalg.norm(points_proj[0,:] - points_proj[1,:])
+    # distance1 = distance1 + 0.3
+    angle1 = np.degrees(np.arccos(orthog_dist/distance1))
+    
+    vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
+    # To project onto ground plane 
+    vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
+
+    # Vector 1 = 2D vector of the wheelchair forward position
+    vec1 = vectors_proj[0, :]
+    vec1 = vec1 / np.linalg.norm(vec1)
+    # Vector 2 = 2D vector of the red box normal
+    vec2 = vectors_proj[1, :] 
+    vec2 = vec2 / np.linalg.norm(vec2)
+
+    a = np.dot(vec1, vec2)
+    #orthog_ang = Are you parralel to the curb?
+    orthog_ang = np.degrees(np.arccos(a))
+    cross = np.cross(vec1, vec2)
+
+    if (np.dot(ground_normal, cross) < 0):
+        orthog_ang = -orthog_ang
+    # import ipdb; ipdb.set_trace()
+    return orthog_dist, distance1, angle1, orthog_ang
