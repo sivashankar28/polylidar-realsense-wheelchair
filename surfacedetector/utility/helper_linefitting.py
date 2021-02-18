@@ -291,7 +291,7 @@ def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, 
     return final_lines
 
 
-def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=True, **kwargs):
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=False, **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
     If multiple pairs can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
@@ -333,6 +333,7 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
 
     return sorted(best_pair, key=lambda i: i['distance'])
 
+
 def make_square(cent, ax1, ax2, normal, w=0.3, h=0.25):
     p1 = cent - w * ax2
     p2 = cent + w * ax2
@@ -349,6 +350,7 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     dist = np.dot(diff, normal)
     scaled_vector = normal*dist[:, np.newaxis]
     projected_points = points - scaled_vector
+    
     return projected_points
 
 
@@ -409,6 +411,7 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 
+
 def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     """
     This code calculates the angle and distance to the curb
@@ -417,42 +420,57 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     'plane_normal' or 'normal' = Normal of the red box
     'ground_normal' = Normal of the ground plane
     All data is in the reference frame of the camera
-    
+
     """
+    #Currently the Cameras are placed on the right hand side of the wheelchair
+    #The origin of the cameras need to be offsetted
+    #so that it takes in account to be in the center of the wheelchair and the footrest 
     wheelchair_center = np.array([-0.3, 0, 0])
-    #Add threshold in the y axis
-    point_on_plane = point_on_plane + np.array([0,0.5,0])
     
-    diff = wheelchair_center - point_on_plane
+    # point of interest is a point that is 0.5 meter away from the center of the plane 
+    point_of_interest = point_on_plane + np.array([0.0, 0.5, 0.0])
+
     # Orthogonal Distance to the hyerplane to the curb
+    diff = wheelchair_center - point_on_plane
     orthog_dist = np.dot(diff, plane_normal)
     orthog_dist = np.abs(orthog_dist)
-    #Coordinates of the wheelchair center and centroid of the box
-    points = np.array([wheelchair_center,point_on_plane])
-    #Coordinates projected with respect to the ground plane
-    points_proj = project_points_geometric_plane(points, ground_normal, np.array([0.0, 0.0, 0.0]))
-    #Calculate distance and angle between wheelchair center and centroid of the red box
-    distance1 = np.linalg.norm(points_proj[0,:] - points_proj[1,:])
-    # distance1 = distance1 + 0.3
-    angle1 = np.degrees(np.arccos(orthog_dist/distance1))
     
+    # Orientation to the Curb
     vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
-    # To project onto ground plane 
+    # To project onto ground plane
     vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
-
     # Vector 1 = 2D vector of the wheelchair forward position
     vec1 = vectors_proj[0, :]
     vec1 = vec1 / np.linalg.norm(vec1)
     # Vector 2 = 2D vector of the red box normal
-    vec2 = vectors_proj[1, :] 
+    vec2 = vectors_proj[1, :]
     vec2 = vec2 / np.linalg.norm(vec2)
-
     a = np.dot(vec1, vec2)
-    #orthog_ang = Are you parralel to the curb?
-    orthog_ang = np.degrees(np.arccos(a))
+    # orthog_ang = Are you parralel to the curb?
+    orientation = np.degrees(np.arccos(a))
+    # Tell you if you are left or right to the curb
     cross = np.cross(vec1, vec2)
-
     if (np.dot(ground_normal, cross) < 0):
-        orthog_ang = -orthog_ang
+        orientation = -orientation
+
     # import ipdb; ipdb.set_trace()
-    return orthog_dist, distance1, angle1, orthog_ang
+    # Angle to Point of Interest Calculations
+    # Coordinates of the wheelchair center and centroid of the box
+    points = np.array([wheelchair_center, point_of_interest])
+    # Coordinates projected with respect to the ground plane
+    points_proj = project_points_geometric_plane(points, ground_normal, np.array([0.0, 0.0, 0.0]))
+    # Calculate distance and angle between wheelchair center and point of interest
+    distance_of_interest = np.linalg.norm(points_proj[0, :] - points_proj[1, :])
+    # angle_of_interest = np.degrees(np.arccos((orthog_dist - 0.5)/distance_of_interest))
+    # angle_of_interest = (math.acos((orthog_dist - 0.5) / distance_of_interest)) * 180/math.pi
+
+    vec3 = points_proj[0,:]
+    vec3 = vec3 / np.linalg.norm(vec3)
+    a2 = np.dot(vec2, vec3)
+    angle_of_interest = np.degrees(a2)
+    cross2 = np.cross(vec2, vec3)
+    if (np.dot(ground_normal, cross2) < 0):
+        angle_of_interest = -angle_of_interest
+
+
+    return orthog_dist, distance_of_interest, angle_of_interest, orientation

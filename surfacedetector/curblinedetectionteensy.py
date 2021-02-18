@@ -15,13 +15,12 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import open3d as o3d
 import pandas as pd
-import serial
 from joblib import dump, load
+import serial
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
-
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
 from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_projection_matrix,
@@ -428,29 +427,35 @@ def capture(config, video=None):
                         top_plane = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
-                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
                         if best_fit_lines:
-                            orthog_dist, distance1, angle1, orthog_ang = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal'])
-
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, Angle 1: %.01f degrees, Orthog_Ang: %.01f degrees ", counter, orthog_dist, distance1, angle1, orthog_ang)
+                            orthog_dist, distance_of_interest, angle_of_interest, orientation = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal'])
+                            # square_points, normal_svm, center = hplane(first_plane, second_plane)
+                            # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, Angle 1: %.01f degrees, Orthog_Ang: %.01f degrees ", counter, orthog_dist, distance_of_interest, angle_of_interest, orientation)
+                            
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
-                                # pass 
+                                # S
                                 plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
                             have_results = True
                         else:
                             logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    if orthog_ang < 0:
-                        orthog_angsign = 0
+                    if orientation < 0:
+                        orientationsign = 0
                     else:
-                        orthog_angsign = 1
-                    ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(distance1)+ "{:.2f}".format(abs(orthog_ang))+ str(orthog_angsign) + "{:.2f}".format(abs(angle1)) + ("\n").encode())
-                    # ser.write(("{:.2f}".format(theta)+"\n").encode())
+                        orientationsign = 1
+                    if angle_of_interest < 0:
+                        angle_of_interestsign = 0
+                    else:
+                        angle_of_interestsign = 1
+
+                    ser.write(("{:.2f}".format(curb_height) + "{:.2f}".format(distance_of_interest) + "{:.2f}".format(abs(angle_of_interest))+ str(angle_of_interestsign) + "{:.2f}".format(abs(orientation))+ str(orientationsign) + "\n").encode())
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
@@ -460,9 +465,11 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     if have_results:
-                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(angle_of_interest), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     
@@ -481,9 +488,7 @@ def capture(config, video=None):
                         plt.imshow(np.asarray(ll_objects['ico'].mask))
                         plt.show()
                         plt.imshow(np.asarray(ll_objects['ico'].image))
-                        plt.show()
-
-                        # import ipdb; ipdb.set_trace()
+                        plt.show()                  
                     
 
                     to_save_frames = config['save'].get('frames')
