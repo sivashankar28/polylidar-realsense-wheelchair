@@ -427,12 +427,16 @@ def capture(config, video=None):
                         top_plane = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
-                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            orthog_dist, distance_of_interest, angle_of_interest, orientation = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal'])
+                            orthog_dist, distance_of_interest, angle_of_interest, orientation = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
+                                                                                                                        best_fit_lines[0]['hplane_point'], \
+                                                                                                                        best_fit_lines[0]['plane_normal'])
                             # square_points, normal_svm, center = hplane(first_plane, second_plane)
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, Angle 1: %.01f degrees, Orthog_Ang: %.01f degrees ", counter, orthog_dist, distance_of_interest, angle_of_interest, orientation)
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, \
+                                         Angle_of_interest: %.01f degrees, Orientation: %.01f degrees ", 
+                                         counter, orthog_dist, distance_of_interest, angle_of_interest, orientation)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
@@ -452,7 +456,15 @@ def capture(config, video=None):
                     else:
                         angle_of_interestsign = 1
 
-                    ser.write(("{:.2f}".format(curb_height) + "{:.2f}".format(distance_of_interest) + "{:.2f}".format(abs(angle_of_interest))+ str(angle_of_interestsign) + "{:.2f}".format(abs(orientation))+ str(orientationsign) + "\n").encode())
+                    # Pad the numbers: 
+                    # curb_height, distance_of_interest  --> 0.00  (METER)
+                    # angle_of_interest, orientation     --> 00.00 (DEGREE)
+                    # orientationsign, angle_of_interest --> 0(NEGTIVE) / 1(POSITIVE)
+                    ser.write(("{:04.2f}".format(curb_height) + "{:04.2f}".format(distance_of_interest) + \
+                               "{:05.2f}".format(abs(angle_of_interest)) + str(angle_of_interestsign) + \
+                               "{:05.2f}".format(abs(orientation))+ str(orientationsign) + "\n").encode())
+
+
                     # sys.exit()
                     # Plot polygon in rgb frame
                     # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)

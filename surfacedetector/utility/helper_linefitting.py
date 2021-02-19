@@ -291,7 +291,7 @@ def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, 
     return final_lines
 
 
-def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=False, **kwargs):
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=True, **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
     If multiple pairs can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
@@ -389,7 +389,7 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
     return best_fit_lines
 
 
-def extract_lines_wrapper(top_points, top_normal, min_points_line=6, **kwargs):
+def extract_lines_wrapper(top_points, top_normal, min_points_line=10, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
