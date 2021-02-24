@@ -20,7 +20,7 @@
     height: 480 #240
     framerate: 60
   tracking: # T265 Camera Setting (Optional)
-    enabled:  false # Leave as false if you don't want to stream T265 in parallel
+    enabled:  false  # Leave as false if you don't want to stream T265 in parallel
     playback: # If desire playback with tracking then point to the bag file for the T265
               # Note that RealSense viewer cant record two devices into one bag file.
               # Hence why you need to point to a secondary bag file.
@@ -42,7 +42,7 @@
       hole_fill: 2 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
     threshold:
       active: true
-      distance: 3.5 # any pixel greater than x is removed
+      distance: 5.0 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns

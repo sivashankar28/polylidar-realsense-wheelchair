@@ -13,7 +13,7 @@ void loop() {
     Serial.println(data1);
 //    delay(1000);
   }
-  delay(100);
+//  delay(100);
 //    Serial.print("You sent me outside: ");
 //    Serial.println(data1);
 //   Serial1.print(data1+'\n');

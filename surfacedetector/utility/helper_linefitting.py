@@ -350,7 +350,7 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     dist = np.dot(diff, normal)
     scaled_vector = normal*dist[:, np.newaxis]
     projected_points = points - scaled_vector
-    
+
     return projected_points
 
 
@@ -389,7 +389,7 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
     return best_fit_lines
 
 
-def extract_lines_wrapper(top_points, top_normal, min_points_line=10, **kwargs):
+def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
@@ -422,24 +422,33 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     All data is in the reference frame of the camera
 
     """
-    #Currently the Cameras are placed on the right hand side of the wheelchair
-    #The origin of the cameras need to be offsetted
-    #so that it takes in account to be in the center of the wheelchair and the footrest 
+    # Currently the Cameras are placed on the right hand side of the wheelchair
+    # The origin of the cameras need to be offsetted
+    # so that it takes in account to be in the center of the wheelchair and the footrest
     wheelchair_center = np.array([-0.3, 0, 0])
-    
-    # point of interest is a point that is 0.5 meter away from the center of the plane 
-    point_of_interest = point_on_plane + np.array([0.0, 0.5, 0.0])
 
+    """
+    Point of interest is a point that is 0.5 meter away from the center of the plane 
+    Calculation:
+    point_of_interest = point_on_plane + (distance [0.5 meters] * unit vector) 
+
+    """
+    point_on_plane_unit_vector = plane_normal / np.linalg.norm(plane_normal)
+    point_of_interest = point_on_plane + (0.5 * point_on_plane_unit_vector)
+    # threshold = np.linalg.norm(point_of_interest - point_on_plane)
+    # import ipdb; ipdb.set_trace()
     # Orthogonal Distance to the hyerplane to the curb
     diff = wheelchair_center - point_on_plane
     orthog_dist = np.dot(diff, plane_normal)
     orthog_dist = np.abs(orthog_dist)
-    
+
     # Orientation to the Curb
     vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
     # To project onto ground plane
-    vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
+    vectors_proj = project_points_geometric_plane(
+        vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
     # Vector 1 = 2D vector of the wheelchair forward position
+    # import ipdb; ipdb.set_trace()
     vec1 = vectors_proj[0, :]
     vec1 = vec1 / np.linalg.norm(vec1)
     # Vector 2 = 2D vector of the red box normal
@@ -454,23 +463,38 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
         orientation = -orientation
 
     # import ipdb; ipdb.set_trace()
-    # Angle to Point of Interest Calculations
-    # Coordinates of the wheelchair center and centroid of the box
-    points = np.array([wheelchair_center, point_of_interest])
+    #
+    # FINAL TURN Calculations
+    #
+    # Coordinates of the wheelchair center and point of interest
+    points = np.array([np.array([-0.30, 0.00, -1.00]), point_of_interest])
     # Coordinates projected with respect to the ground plane
     points_proj = project_points_geometric_plane(points, ground_normal, np.array([0.0, 0.0, 0.0]))
+    points2 = np.array([wheelchair_center, point_of_interest])
+    points_proj2 = project_points_geometric_plane(points2, ground_normal, np.array([0.0, 0.0, 0.0]))
     # Calculate distance and angle between wheelchair center and point of interest
-    distance_of_interest = np.linalg.norm(points_proj[0, :] - points_proj[1, :])
-    # angle_of_interest = np.degrees(np.arccos((orthog_dist - 0.5)/distance_of_interest))
-    # angle_of_interest = (math.acos((orthog_dist - 0.5) / distance_of_interest)) * 180/math.pi
+    distance_of_interest = np.linalg.norm(points_proj2[0, :] - points_proj2[1, :])
+    # final_turn = np.degrees(np.arccos((orthog_dist - 0.5)/distance_of_interest))
+    # final_turn = (math.acos((orthog_dist - 0.5) / distance_of_interest)) * 180/math.pi
 
-    vec3 = points_proj[0,:]
+    vec3 = points_proj[0, :]
     vec3 = vec3 / np.linalg.norm(vec3)
     a2 = np.dot(vec2, vec3)
-    angle_of_interest = np.degrees(a2)
+    final_turn = np.degrees(np.arccos(a2))
     cross2 = np.cross(vec2, vec3)
     if (np.dot(ground_normal, cross2) < 0):
-        angle_of_interest = -angle_of_interest
+        final_turn = -final_turn
 
+    #
+    # INITIAL TURN
+    #
 
-    return orthog_dist, distance_of_interest, angle_of_interest, orientation
+    a3 = np.dot(vec1, vec3)
+    initial_turn = np.degrees(np.arccos(a3))
+    cross3 = np.cross(vec1, vec3)
+    if (np.dot(ground_normal, cross3) < 0):
+        initial_turn = -initial_turn
+
+    # import ipdb; ipdb.set_trace()
+
+    return orthog_dist, distance_of_interest, final_turn, orientation, initial_turn

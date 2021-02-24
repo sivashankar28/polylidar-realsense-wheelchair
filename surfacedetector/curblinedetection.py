@@ -17,6 +17,7 @@ import open3d as o3d
 import pandas as pd
 from joblib import dump, load
 
+
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
 from fastga import GaussianAccumulatorS2, IcoCharts
 
@@ -426,12 +427,16 @@ def capture(config, video=None):
                         top_plane = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
-                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False)
+                        _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            orthog_dist, distance_of_interest, angle_of_interest, orientation = get_theta_and_distance(best_fit_lines[0]['hplane_normal'], best_fit_lines[0]['hplane_point'], best_fit_lines[0]['plane_normal'])
+                            orthog_dist, distance_of_interest, final_turn, orientation, initial_turn = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
+                                                                                                                        best_fit_lines[0]['hplane_point'], \
+                                                                                                                        best_fit_lines[0]['plane_normal'])
                             # square_points, normal_svm, center = hplane(first_plane, second_plane)
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, Angle 1: %.01f degrees, Orthog_Ang: %.01f degrees ", counter, orthog_dist, distance_of_interest, angle_of_interest, orientation)
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, \
+                                         Initial Turn: %.01f degrees, Final Turn: %.01f degrees, Orientation: %.01f degrees", 
+                                         counter, orthog_dist, distance_of_interest, initial_turn, final_turn, orientation)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
@@ -442,9 +447,27 @@ def capture(config, video=None):
                             logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
+                    # if orientation < 0:
+                    #     orientationsign = 0
+                    # else:
+                    #     orientationsign = 1
+                    # if final_turn < 0:
+                    #     final_turnsign = 0
+                    # else:
+                    #     final_turnsign = 1
+
+                    # Pad the numbers: 
+                    # curb_height, distance_of_interest  --> 0.00  (METER)
+                    # final_turn, orientation     --> 00.00 (DEGREE)
+                    # orientationsign, final_turn --> 0(NEGTIVE) / 1(POSITIVE)
+                    # ser.write(("{:04.2f}".format(curb_height) + "{:04.2f}".format(distance_of_interest) + \
+                    #            "{:05.2f}".format(abs(final_turn)) + str(final_turnsign) + \
+                    #            "{:05.2f}".format(abs(orientation))+ str(orientationsign) + "\n").encode())
+
+
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
@@ -454,11 +477,12 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     if have_results:
-                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(angle_of_interest), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (20,360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle for initial turn: '"{:.2f}" 'deg'.format(initial_turn), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     
@@ -513,6 +537,7 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
+
             # Run capture loop
             capture(config, args.video)
         except yaml.YAMLError as exc:
