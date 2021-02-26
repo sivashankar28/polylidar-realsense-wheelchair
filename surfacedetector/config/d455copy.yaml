@@ -2,8 +2,8 @@
   name: Default Settings for D455 extracting multiple surfaces using Polylidar3D
   advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: false  # Only activate playback if this is true
-    file: "data/D455/curbtest.bag"
+    enabled: true  # Only activate playback if this is true
+    file: "data/D455/curb_1.5m_L45d.bag"
     repeat: false     # repeat bag after its over
   save:
     video: ""                   # currently doesn't do anything
@@ -42,7 +42,7 @@
       hole_fill: 2 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
     threshold:
       active: true
-      distance: 5.0 # any pixel greater than x is removed
+      distance: 4.0 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns
@@ -62,7 +62,7 @@
     min_hole_vertices : 10 # minimum number of vertices in a hole to return
     min_triangles: 500 # minimum number of triangles needed to make a plane
   fastga: # Parameters used for dominant plane normal estimation
-    level: 4 # refinement level of the gaussian accumulator
+    level: 5 # refinement level of the gaussian accumulator
     down_sample_fraction: 0.15 # only use X% of triangle normals from mesh for integration, lower the faster
     find_peaks_kwargs: # peak detection arguments
       threshold_abs: 30 # [0-255], minimum value of normalized histogram of S2 to be a peak

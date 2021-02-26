@@ -478,7 +478,7 @@ def capture(config, video=None):
 
                     # sys.exit()
                     # Plot polygon in rgb frame
-                    # plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images

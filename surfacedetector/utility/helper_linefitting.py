@@ -463,9 +463,9 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
         orientation = -orientation
 
     # import ipdb; ipdb.set_trace()
-    #
+    
     # FINAL TURN Calculations
-    #
+    
     # Coordinates of the wheelchair center and point of interest
     points = np.array([np.array([-0.30, 0.00, -1.00]), point_of_interest])
     # Coordinates projected with respect to the ground plane
@@ -482,13 +482,11 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     a2 = np.dot(vec2, vec3)
     final_turn = np.degrees(np.arccos(a2))
     cross2 = np.cross(vec2, vec3)
-    if (np.dot(ground_normal, cross2) < 0):
+    if (np.dot(ground_normal, cross2) > 0):
         final_turn = -final_turn
 
-    #
+    
     # INITIAL TURN
-    #
-
     a3 = np.dot(vec1, vec3)
     initial_turn = np.degrees(np.arccos(a3))
     cross3 = np.cross(vec1, vec3)
