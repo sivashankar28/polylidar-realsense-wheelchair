@@ -429,14 +429,14 @@ def capture(config, video=None):
                         filtered_top_points = filter_points(top_points)  # <100 us
                         _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            orthog_dist, distance_of_interest, final_turn, orientation, initial_turn = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
+                            orthog_dist, distance_of_interest, final_turn, orientation = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
                                                                                                                         best_fit_lines[0]['hplane_point'], \
                                                                                                                         best_fit_lines[0]['plane_normal'])
                             # square_points, normal_svm, center = hplane(first_plane, second_plane)
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, \
-                                         Initial Turn: %.01f degrees, Final Turn: %.01f degrees, Orientation: %.01f degrees", 
-                                         counter, orthog_dist, distance_of_interest, initial_turn, final_turn, orientation)
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to the point of interest: %.02f meters, \
+                                        Final Turn: %.01f degrees, Orientation: %.01f degrees", 
+                                         counter, orthog_dist, distance_of_interest, final_turn, orientation)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
@@ -481,7 +481,7 @@ def capture(config, video=None):
                         cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Angle for initial turn: '"{:.2f}" 'deg'.format(initial_turn), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        # cv2.putText(images,'Angle for initial turn: '"{:.2f}" 'deg'.format(initial_turn), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
