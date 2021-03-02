@@ -23,7 +23,7 @@ def main():
     PLATFORM_HEIGHT = 0.25
     WHEEL_CHAIR_POS = np.array([1.0, -0.0, 0])
     WHEEL_CHAIR_ROT = dict(roll=0, pitch=0, yaw=45)
-    SENSOR_MOUNT_POS = np.array([0.34, 0.34, 0.7])
+    SENSOR_MOUNT_POS = np.array([0.34, 0, 0.7])
     SENSOR_MOUNT_ROT = dict(roll=0, pitch=-25, yaw=0)
     SENSOR_POS = np.array([0.0, 0.0, 0.0]) #np.array([0, 0.025, 0.025])
 
@@ -47,7 +47,7 @@ def main():
     platform_geom = create_box(platform)
     platform_cp_geom = create_point(platform_cp)
     platform_poi_geom = create_point(platform_poi)
-    wheel_chair_geom = create_box(wheel_chair)
+    wheel_chair_geom = create_box(wheel_chair, set_origin_to_front=True)
     sensor_mount_geom = create_box(sensor_mount)
     sensor_geom = create_box(sensor)
 

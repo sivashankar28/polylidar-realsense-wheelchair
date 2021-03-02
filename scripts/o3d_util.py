@@ -58,7 +58,7 @@ def create_cf(size, transform):
     cf.transform(transform)
     return cf
 
-def create_box(geom_dict):
+def create_box(geom_dict, set_origin_to_front=False):
 
     half_x = geom_dict['width'] / 2.0
     half_y = geom_dict['height'] / 2.0
@@ -71,6 +71,8 @@ def create_box(geom_dict):
     geom.compute_vertex_normals()
 
     geom.vertices = o3d.utility.Vector3dVector(np.asarray(geom.vertices) - diff)
+    if set_origin_to_front:
+        geom.vertices = o3d.utility.Vector3dVector(np.asarray(geom.vertices) - [0, half_y, 0])
 
     transform = compute_transform(geom_dict)
     geom.transform(transform)
