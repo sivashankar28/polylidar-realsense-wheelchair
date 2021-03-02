@@ -90,3 +90,25 @@
       positive_buffer: 0.000 # m, Positively expand polygon.  Fills in small holes
       negative_buffer: 0.000 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon
       simplify: 0.00  # m, simplify edges of polygon
+  poi_offset: 0.5 # offset from platform for maneuver
+  frames:
+    sensor_mount:
+      # In relation to coordinate frame of the wheel chair (y-forward, x-right, z-up)
+      translation: [0.34, 0.34, 0.7] # TODO UPDATE - wheelchair is 68 cm wide
+      rotation:
+        roll: 0.0
+        pitch: -25.0 # TODO UPDATE - Note that this will not change turning manuever answers
+        yaw: 0.0
+    sensor:
+      # In relation to coordinate frame of the sensor mount
+      translation: [0.0, 0.0, 0.0] # leave at 0
+      rotation: [ # y -> -z  z -> y # leave as is
+        [1,  0, 0],
+        [0,  0, 1],
+        [0, -1, 0]
+      ]
+      # rotation: [
+      #   [1, 0, 0],
+      #   [0, 1, 0],
+      #   [0, 0, 1]
+      # ]

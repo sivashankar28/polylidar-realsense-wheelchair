@@ -31,7 +31,7 @@ from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshe
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
 from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane
-from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance, create_transform, get_turning_manuever
 
 logging.basicConfig(level=logging.INFO)
 
@@ -383,6 +383,14 @@ def capture(config, video=None):
         frame_height = config['color']['height']
         out_vid = cv2.VideoWriter(video, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (frame_width, frame_height))
 
+    # Create Homogenous Transform from sensor frame to wheel chair frame
+    sensor_mount_frame = config['frames']['sensor_mount']
+    sensor_frame = config['frames']['sensor']
+    sensor_to_wheel_chair_transform = create_transform(np.array(sensor_mount_frame['translation']), sensor_mount_frame['rotation']) \
+        @ create_transform(sensor_frame['translation'], sensor_frame['rotation'])
+
+    # print(sensor_to_wheel_chair_transform)
+    # sys.exit()
     all_records = []
     counter = 0
     try:
@@ -429,13 +437,24 @@ def capture(config, video=None):
                         filtered_top_points = filter_points(top_points)  # <100 us
                         _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            orthog_dist, distance_of_interest, final_turn, orientation = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
-                                                                                                                        best_fit_lines[0]['hplane_point'], \
-                                                                                                                        best_fit_lines[0]['plane_normal'])
+                            platform_center_sensor_frame = best_fit_lines[0]['hplane_point']
+                            platform_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
+                            print(platform_center_sensor_frame, platform_normal_sensor_frame)
+                            result = get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, \
+                                        sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.5), debug=True)
+                            plt.show()
+
+                            orthog_dist = result['ortho_dist_platform']
+                            distance_of_interest = result['dist_poi']
+                            orientation = result['first_turn']
+                            final_turn= result['second_turn']
+                            # orthog_dist, distance_of_interest, final_turn, orientation = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
+                            #                                                                                             best_fit_lines[0]['hplane_point'], \
+                            #                                                                                             best_fit_lines[0]['plane_normal'])
                             # square_points, normal_svm, center = hplane(first_plane, second_plane)
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to the point of interest: %.02f meters, \
-                                        Final Turn: %.01f degrees, Orientation: %.01f degrees", 
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to the point of interest: %.02f meters, " \
+                                "Final Turn: %.01f degrees, Orientation: %.01f degrees", 
                                          counter, orthog_dist, distance_of_interest, final_turn, orientation)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)

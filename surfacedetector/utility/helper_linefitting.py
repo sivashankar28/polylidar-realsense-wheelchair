@@ -26,8 +26,10 @@ from itertools import combinations
 
 import numpy as np
 from scipy.ndimage.filters import uniform_filter1d
+from scipy.spatial.transform import Rotation as R
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
+import matplotlib.pyplot as plt
 
 
 def choose_plane(first_plane, second_plane):
@@ -411,6 +413,139 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 
+def create_transform(translate, rotation):
+    transform = np.eye(4)
+    transform[:3, 3] = np.array(translate)
+    if isinstance(rotation,np.ndarray) or isinstance(rotation, list):
+        transform[:3, :3] = np.array(rotation)
+    elif isinstance(rotation, dict):
+        rot = R.from_euler('xyz', angles=[rotation['pitch'], rotation['roll'], rotation['yaw']], degrees=True)
+        rm = rot.as_matrix()
+        transform[:3, :3] = rm
+    else:
+        raise ValueError("Rotation must be an ndarray or a dictionary object with euler angles")
+    return transform
+
+def tranform_vectors(vectors, transform):
+    point = np.array([0.0, 0.0, 0.0 , 1])
+    point[:3] = vectors
+    new_point = (transform @ point)[:3]
+    return new_point
+
+def rotate_vectors(vectors, transform):
+    rot = transform[:3, :3]
+    new_vec = rot @ vectors
+    return new_vec
+
+def get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, sensor_to_wheel_chair_transform, **kwargs):
+    platform_center_pos_wheel_chair_frame = tranform_vectors(platform_center_sensor_frame, sensor_to_wheel_chair_transform)
+    platform_normal_wheel_chair_frame = rotate_vectors(platform_normal_sensor_frame, sensor_to_wheel_chair_transform)
+
+    result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, **kwargs)
+
+    return result
+
+def compute_2D_angle_difference(vector1, vector2):
+    """Computes the 2D angle difference between vector 1 and vector 2
+    The sign of the angle is the CC rotation to move vector1 TO vector2
+    Args:
+        vector1 (np.ndarray): vector 1
+        vector2 (np.ndarray): vector 2
+
+    Returns:
+        float: Angle difference in degrees
+    """
+    angle = np.arctan2(vector2[1], vector2[0]) - np.arctan2(vector1[1], vector1[0])
+
+    if angle > 180:
+        angle = angle - 360
+    elif angle < -180:
+        angle = angle + 360
+
+    return np.degrees(angle)
+
+def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, poi_offset=0.5, debug=False, **kwargs):
+    """Will compute the turning manuever for the wheel chair. CC = Counter Clockwise
+    Assumes that the Wheel Chair reference frame origin is the center of rotation for wheel chair turn commands
+    Maneuvers Steps:
+      0. Calculate point of interest (POI) as `platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame`
+      1. Execute rotation of "first_turn" degrees CC. This aligns the wheel chair y-axis to point to the POI
+      2. Execute forward move (y-axis) "dist" meters
+      3. Execute rotation of "second_turn" degrees CC. This aligns the wheel chair y-axis to platform
+
+    This assumes perfect control and execution of these commands. In reality you will need feeback control probably for 
+    steps 2 and 3. Step 1 is 'probably' not as important to need feedback control.
+
+    Args:
+        platform_center_pos_wheel_chair_frame (np.ndarray): The platform center point in the WHEEL CHAIR FRAME
+        platform_normal_wheel_chair_frame (np.ndarray): The platform normal in the WHEEL CHAIR FRAME. Normal is pointing TOWARDS the wheel chair.
+        debug (bool, optional): Whether to print out data. Defaults to False.
+
+    Returns:
+        dict: A dictionary of the maneuver
+            alpha = angle between wheel chair y-axis (forward) and vector from wheel chair to point of interest
+            beta = angle between wheel chair y-axis (forward) and reversed platform normal
+            dist_poi = 2D distance between wheel chair center and point of interest
+            ortho_dist_platform = 2D orthogonal distance between wheel chair center and center of platform
+            first_turn = angle to turn wheel chair to align with vector directing wheel chair to point of interst (alpha)
+            second_turn = angle to turn wheel chair to align with platform normal (-alpha + beta)
+            vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheel chair to poi (wheel chair frame)
+            platform_normal_inverted_unit = 3D unit vector of the inverse of the platform normal 
+    """
+    platform_poi_pos_wheel_chair_frame = platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame
+    wheel_chair_pos_in_wheel_chair_frame = np.array([0.0,0.0,0.0]) # The position will be 0 in wheel chair frame (origin)
+    wheel_chair_dir_vec_unit = np.array([0.0, 1.0, 0.0]) # forward y-axis is wheel chair direction
+
+    # Orthogonal distance to the platform
+    ortho_dist_platform = np.dot(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame)
+    ortho_dist_platform = np.abs(ortho_dist_platform)
+
+    vec_wheelchair_to_poi = platform_poi_pos_wheel_chair_frame - wheel_chair_pos_in_wheel_chair_frame # called Vec3 (blue) in diagrams
+    vec_wheel_chair_to_poi_2D = vec_wheelchair_to_poi[:2] # the z-axis is height in this reference frame
+    dist_poi = np.linalg.norm(vec_wheel_chair_to_poi_2D)
+    vec_wheel_chair_to_poi_2D_unit = vec_wheel_chair_to_poi_2D / dist_poi
+
+    platform_normal_inverted_unit = -platform_normal_wheel_chair_frame # called Vec2 (red) in diagrams
+
+    alpha = compute_2D_angle_difference(wheel_chair_dir_vec_unit, vec_wheel_chair_to_poi_2D_unit)
+    beta = compute_2D_angle_difference(wheel_chair_dir_vec_unit,platform_normal_inverted_unit )
+
+    first_turn = alpha
+    second_turn = -alpha + beta
+
+    result = dict(alpha=alpha, beta=beta, dist_poi=dist_poi, ortho_dist_platform=ortho_dist_platform,first_turn=first_turn, second_turn=second_turn, 
+                vec_wheel_chair_to_poi_2D_unit=vec_wheel_chair_to_poi_2D_unit, platform_normal_inverted_unit=platform_normal_inverted_unit,
+                platform_center_pos_wheel_chair_frame=platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame=platform_normal_wheel_chair_frame,
+                platform_poi_pos_wheel_chair_frame=platform_poi_pos_wheel_chair_frame)
+    if debug:
+        print(f"Alpha Angle {alpha:.1f}; Beta Angle: {beta:.1f}")
+        print(f"First Turn CC: {first_turn:.1f} degres; Move Distance: {dist_poi:.2f};  Second Turn: {second_turn:.1f}")
+        plot_maneuver(result)
+
+    return result
+
+def plot_maneuver(result):
+    platform_poi_pos_wheel_chair = result['platform_poi_pos_wheel_chair_frame']
+    platform_center = result['platform_center_pos_wheel_chair_frame']
+
+    fig, ax = plt.subplots(1, 1)
+    ax.scatter(platform_center[0], platform_center[1], c=[[1, 0, 0]])
+    ax.text(platform_center[0] + 0.03, platform_center[1], 'platform')
+    ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c=[[0, 1, 0]])
+    ax.text(platform_poi_pos_wheel_chair[0] + 0.03, platform_poi_pos_wheel_chair[1], 'poi')
+    ax.scatter(0, 0, c='k')
+    ax.text(0.01, 0, 'Wheel Chair')
+    arrow_(ax, 0.0, 0.0, 0, 1, ec='g', fc='g', width=.01)
+    arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='b', fc='b', width=.01)
+    arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='r', fc='r', width=.01)
+    ax.text(result['vec_wheel_chair_to_poi_2D_unit'][0] / 2.0, (result['vec_wheel_chair_to_poi_2D_unit'][1] + 1) / 2.0, rf'$\alpha={result["alpha"]:.0f}^\circ$')
+    ax.text((0.0 + result['platform_normal_inverted_unit'][0]) / 2.0, 
+        (1.0 + result['platform_normal_inverted_unit'][1]) / 2.0, rf'$\beta={result["beta"]:.0f}^\circ$')
+    ax.axis('equal')
+
+def arrow_(ax, x, y, dx, dy, **kwargs):
+    ax.arrow(x, y, dx, dy, **kwargs)
+    ax.scatter(x + dx + 0.1, y + dy + 0.1, alpha=0.0)
 
 def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     """
