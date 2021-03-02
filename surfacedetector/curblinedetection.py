@@ -439,7 +439,7 @@ def capture(config, video=None):
                         if best_fit_lines:
                             platform_center_sensor_frame = best_fit_lines[0]['hplane_point']
                             platform_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
-                            print(platform_center_sensor_frame, platform_normal_sensor_frame)
+                            # print(platform_center_sensor_frame, platform_normal_sensor_frame)
                             result = get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, \
                                         sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.5), debug=True)
                             plt.show()
@@ -448,14 +448,14 @@ def capture(config, video=None):
                             distance_of_interest = result['dist_poi']
                             orientation = result['first_turn']
                             final_turn= result['second_turn']
-                            # orthog_dist, distance_of_interest, final_turn, orientation = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
-                            #                                                                                             best_fit_lines[0]['hplane_point'], \
+                            # orthog_dist, distance_of_interest, final_turn, orientation = get_theta_and_distance( platform_normal_sensor_frame, \
+                            #                                                                                             platform_center_sensor_frame, \
                             #                                                                                             best_fit_lines[0]['plane_normal'])
                             # square_points, normal_svm, center = hplane(first_plane, second_plane)
                             # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to the point of interest: %.02f meters, " \
-                                "Final Turn: %.01f degrees, Orientation: %.01f degrees", 
-                                         counter, orthog_dist, distance_of_interest, final_turn, orientation)
+                            logging.info("Frame #: %s, Orthogonal Distance to Platform: %.02f m, Distance to POI: %.02f m, " \
+                                "First Turn: %.01f degrees, Second Turn: %.01f degrees", 
+                                         counter, orthog_dist, distance_of_interest, orientation, final_turn)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 

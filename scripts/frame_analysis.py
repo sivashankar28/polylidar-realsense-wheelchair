@@ -15,113 +15,6 @@ MOUNT_TO_SENSOR_ROT = np.linalg.inv(np.array([
     [0, 1, 0]
 ]))
 
-# def get_turning_manuever(platform_normal_sensor_frame, platform_center_sensor_frame, sensor_to_wheel_chair_transform, **kwargs):
-#     platform_center_pos_wheel_chair_frame = tranform_vectors(platform_center_sensor_frame, sensor_to_wheel_chair_transform)
-#     platform_normal_wheel_chair_frame = rotate_vectors(platform_normal_sensor_frame, sensor_to_wheel_chair_transform)
-
-#     result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame,  **kwargs)
-
-#     return result
-
-# def compute_2D_angle_difference(vector1, vector2):
-#     """Computes the 2D angle difference between vector 1 and vector 2
-#     The sign of the angle is the CC rotation to move vector1 TO vector2
-#     Args:
-#         vector1 (np.ndarray): vector 1
-#         vector2 (np.ndarray): vector 2
-
-#     Returns:
-#         float: Angle difference in degrees
-#     """
-#     angle = np.degrees(np.arctan2(vector2[1], vector2[0]) - np.arctan2(vector1[1], vector1[0]))
-
-#     if angle > 180:
-#         angle = angle - 360
-#     elif angle < -180:
-#         angle = angle + 360
-
-#     return angle
-
-# def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, poi_offset=0.5, debug=False, **kwargs):
-#     """Will compute the turning manuever for the wheel chair. CC = Counter Clockwise
-#     Assumes that the Wheel Chair reference frame origin is the center of rotation for wheel chair turn commands
-#     Maneuvers Steps:
-#       0. Calculate point of interest (POI) as `platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame`
-#       1. Execute rotation of "first_turn" degrees CC. This aligns the wheel chair y-axis to point to the POI
-#       2. Execute forward move (y-axis) "dist" meters
-#       3. Execute rotation of "second_turn" degrees CC. This aligns the wheel chair y-axis to platform
-
-#     This assumes perfect control and execution of these commands. In reality you will need feeback control probably for 
-#     steps 2 and 3. Step 1 is 'probably' not as important to need feedback control.
-
-#     Args:
-#         platform_center_pos_wheel_chair_frame (np.ndarray): The platform center point in the WHEEL CHAIR FRAME
-#         platform_normal_wheel_chair_frame (np.ndarray): The platform normal in the WHEEL CHAIR FRAME. Normal is pointing TOWARDS the wheel chair.
-#         debug (bool, optional): Whether to print out data. Defaults to False.
-
-#     Returns:
-#         dict: A dictionary of the maneuver
-#             alpha = angle between wheel chair y-axis (forward) and vector from wheel chair to point of interest
-#             beta = angle between wheel chair y-axis (forward) and reversed platform normal
-#             dist_poi = 2D distance between wheel chair center and point of interest
-#             ortho_dist_platform = 2D orthogonal distance between wheel chair center and center of platform
-#             first_turn = angle to turn wheel chair to align with vector directing wheel chair to point of interst (alpha)
-#             second_turn = angle to turn wheel chair to align with platform normal (-alpha + beta)
-#             vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheel chair to poi (wheel chair frame)
-#             platform_normal_inverted_unit = 3D unit vector of the inverse of the platform normal 
-#     """
-#     platform_poi_pos_wheel_chair_frame = platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame
-#     wheel_chair_pos_in_wheel_chair_frame = np.array([0.0,0.0,0.0]) # The position will be 0 in wheel chair frame (origin)
-#     wheel_chair_dir_vec_unit = np.array([0.0, 1.0, 0.0]) # forward y-axis is wheel chair direction
-
-#     # Orthogonal distance to the platform
-#     ortho_dist_platform = np.dot(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame)
-#     ortho_dist_platform = np.abs(ortho_dist_platform)
-
-#     vec_wheelchair_to_poi = platform_poi_pos_wheel_chair_frame - wheel_chair_pos_in_wheel_chair_frame # called Vec3 (blue) in diagrams
-#     vec_wheel_chair_to_poi_2D = vec_wheelchair_to_poi[:2] # the z-axis is height in this reference frame
-#     dist_poi = np.linalg.norm(vec_wheel_chair_to_poi_2D)
-#     vec_wheel_chair_to_poi_2D_unit = vec_wheel_chair_to_poi_2D / dist_poi
-
-#     platform_normal_inverted_unit = -platform_normal_wheel_chair_frame # called Vec2 (red) in diagrams
-
-#     alpha = compute_2D_angle_difference(wheel_chair_dir_vec_unit, vec_wheel_chair_to_poi_2D_unit)
-#     beta = compute_2D_angle_difference(wheel_chair_dir_vec_unit,platform_normal_inverted_unit )
-
-
-#     first_turn = alpha
-#     second_turn = -alpha + beta
-
-#     result = dict(alpha=alpha, beta=beta, dist_poi=dist_poi, ortho_dist_platform=ortho_dist_platform,first_turn=first_turn, second_turn=second_turn, 
-#                 vec_wheel_chair_to_poi_2D_unit=vec_wheel_chair_to_poi_2D_unit, platform_normal_inverted_unit=platform_normal_inverted_unit,
-#                 platform_center_pos_wheel_chair_frame=platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame=platform_normal_wheel_chair_frame,
-#                 platform_poi_pos_wheel_chair_frame=platform_poi_pos_wheel_chair_frame)
-#     if debug:
-#         print(f"Alpha Angle {alpha:.1f}; Beta Angle: {beta:.1f}")
-#         print(f"First Turn CC: {first_turn:.1f} degres; Move Distance: {dist_poi:.2f};  Second Turn: {second_turn:.1f}")
-#         plot_maneuver(result)
-
-#     return result
-
-# def plot_maneuver(result):
-#     platform_poi_pos_wheel_chair = result['platform_poi_pos_wheel_chair_frame']
-#     platform_center = result['platform_center_pos_wheel_chair_frame']
-
-#     fig, ax = plt.subplots(1, 1)
-#     ax.scatter(platform_center[0], platform_center[1], c=[[0, 1, 0]])
-#     ax.text(platform_center[0] + 0.03, platform_center[1], 'platform')
-#     ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c=[[0, 1, 0]])
-#     ax.text(platform_poi_pos_wheel_chair[0] + 0.03, platform_poi_pos_wheel_chair[1], 'poi')
-#     ax.scatter(0, 0, c='k')
-#     ax.text(0.01, 0, 'Wheel Chair')
-#     arrow_(ax, 0.0, 0.0, 0, 1, ec='g', fc='g', width=.01)
-#     arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='b', fc='b', width=.01)
-#     arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='r', fc='r', width=.01)
-#     ax.text(result['vec_wheel_chair_to_poi_2D_unit'][0] / 2.0, (result['vec_wheel_chair_to_poi_2D_unit'][1] + 1) / 2.0, rf'$\alpha={result["alpha"]:.0f}^\circ$')
-#     ax.text((0.0 + result['platform_normal_inverted_unit'][0]) / 2.0, 
-#         (1.0 + result['platform_normal_inverted_unit'][1]) / 2.0, rf'$\beta={result["beta"]:.0f}^\circ$')
-#     ax.axis('equal')
-
 
 def main():
     # Contants you can change
@@ -170,8 +63,10 @@ def main():
     platform_poi_pos_world_proj[2] = 0
     wheel_chair_pos_world_proj[2] = 0
 
-    # Create lines between wheel chair center and poi (Blue) and INCORRECT LINE between sensor frame and poi (RED)
-    vec3_geom_1 = LineMesh([sensor_pos_world, platform_poi_pos_world, sensor_pos_world_proj, platform_poi_pos_world_proj ], lines=[[0, 1], [2,3]], radius=0.005, colors=[1, 0, 0])
+    platfrom_normal = o3d.geometry.TriangleMesh.create_arrow(cylinder_radius=0.005, cone_radius=0.01, cylinder_height=0.20, cone_height=0.02).transform(platform_cp['transform'])
+    platfrom_normal= platfrom_normal.compute_vertex_normals().paint_uniform_color([1, 0, 0]).rotate(platfrom_normal.get_rotation_matrix_from_xyz([np.pi/2, 0, 0]))
+    # Create line between wheel chair center and poi (Blue) and INCORRECT LINE between sensor frame and poi (Purple)
+    vec3_geom_1 = LineMesh([sensor_pos_world, platform_poi_pos_world, sensor_pos_world_proj, platform_poi_pos_world_proj ], lines=[[0, 1], [2,3]], radius=0.005, colors=[0.5, 0, 0.5])
     vec3_geom_2 = LineMesh([wheel_chair_pos_world_proj, platform_poi_pos_world_proj], lines=[[0, 1]], radius=0.005, colors=[0, 0, 1])
 
     # Simulate POI and wall_normal in SENSOR frame, this is what is generated by RealSense Frame
@@ -204,7 +99,7 @@ def main():
     plt.pause(0.01)
 
     o3d.visualization.draw_geometries([global_frame, grid, *wheel_chair_geom, *platform_geom, *platform_cp_geom, 
-                                        *platform_poi_geom,*sensor_mount_geom, sensor_geom[1],
+                                        *platform_poi_geom,*sensor_mount_geom, sensor_geom[1], platfrom_normal,
                                         *vec3_geom_1.cylinder_segments, *vec3_geom_2.cylinder_segments])
 
 
