@@ -20,9 +20,9 @@ def main():
     # Contants you can change
     POI_OFFSET = 0.5
     PLATFORM_WIDTH = 1.16
-    PLATFORM_HEIGHT = 0.25
-    WHEEL_CHAIR_POS = np.array([1.0, -0.0, 0])
-    WHEEL_CHAIR_ROT = dict(roll=0, pitch=0, yaw=45)
+    PLATFORM_HEIGHT = 0.20
+    WHEEL_CHAIR_POS = np.array([-2.5, 1.0, 0])
+    WHEEL_CHAIR_ROT = dict(roll=0, pitch=0, yaw=-35)
     SENSOR_MOUNT_POS = np.array([0.34, 0, 0.7])
     SENSOR_MOUNT_ROT = dict(roll=0, pitch=-25, yaw=0)
     SENSOR_POS = np.array([0.0, 0.0, 0.0]) #np.array([0, 0.025, 0.025])
@@ -54,8 +54,8 @@ def main():
     # Get sensor, poi, and wheelchair 3D position and 2D projections in WORLD frame
     sensor_pos_world = sensor['geom'].get_center()
     platform_cp_pos_world = platform_cp['geom'].get_center()
-    platform_poi_pos_world = platform_poi['geom'].get_center()
-    wheel_chair_pos_world = wheel_chair['geom'].get_center()
+    platform_poi_pos_world = platform_poi['geom'].get_center()[:3]
+    wheel_chair_pos_world =  (wheel_chair['transform'] @ np.array([0, 0, 0, 1]))[:3]  # wheel_chair_geom[1].get_center()
     sensor_pos_world_proj = np.copy(sensor_pos_world)
     platform_poi_pos_world_proj = np.copy(platform_poi_pos_world)
     wheel_chair_pos_world_proj = np.copy(wheel_chair_pos_world)
