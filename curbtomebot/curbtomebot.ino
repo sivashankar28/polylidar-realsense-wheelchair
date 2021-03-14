@@ -2,8 +2,10 @@ String data1;
 void setup() {
   Serial.begin(9600);
   Serial1.begin(9600);
+  pinMode(13,OUTPUT);
 }
 void loop() {
+  digitalWrite(13,HIGH);
   data1="";
 //  Serial.println("HERE");
   if (Serial.available() > 0) {

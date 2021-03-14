@@ -2,6 +2,7 @@ import sys
 import open3d as o3d
 import matplotlib.pyplot as plt
 import numpy as np
+from ..surfacedetector/utility/line_mesh import LineMesh
 from surfacedetector.utility.line_mesh import LineMesh
 from scripts.o3d_util import create_grid, create_box, tranform_vectors, rotate_vectors, create_transform, create_point
 from surfacedetector.utility.helper_linefitting import compute_turning_manuever
@@ -36,9 +37,9 @@ def main():
     platform_cp = dict(parent=platform, center_point=np.array([0, -0.5, 0.125]), size=0.02, rotation=dict(roll=0, pitch=0, yaw=0), color=[1,0,0])
     platform_poi = dict(parent=platform, center_point=np.array([0, -0.5 - POI_OFFSET, 0.125]), size=0.02, rotation=dict(roll=0, pitch=0, yaw=0), color=[0,1,0])
 
-    # Wheel Chair Box, Sensor Mount, and Sensor
+    # wheelchair Box, Sensor Mount, and Sensor
     wheel_chair = dict(parent=None, center_point=WHEEL_CHAIR_POS, depth=0.7, width=0.68, height=0.68, rotation=WHEEL_CHAIR_ROT)
-                                            # offset from wheel chair center          rotation from wheel chair frame
+                                            # offset from wheelchair center          rotation from wheelchair frame
     sensor_mount = dict(parent=wheel_chair, center_point=SENSOR_MOUNT_POS, rotation=SENSOR_MOUNT_ROT, width=0.1, depth=0.05, height=0.03)
     sensor = dict(parent=sensor_mount, center_point=SENSOR_POS, rotation=dict(roll=0, pitch=0, yaw=0), post_rot=MOUNT_TO_SENSOR_ROT, width=0.01, depth=0.025, height=0.01)
 
@@ -65,7 +66,7 @@ def main():
 
     platfrom_normal = o3d.geometry.TriangleMesh.create_arrow(cylinder_radius=0.005, cone_radius=0.01, cylinder_height=0.20, cone_height=0.02).transform(platform_cp['transform'])
     platfrom_normal= platfrom_normal.compute_vertex_normals().paint_uniform_color([1, 0, 0]).rotate(platfrom_normal.get_rotation_matrix_from_xyz([np.pi/2, 0, 0]))
-    # Create line between wheel chair center and poi (Blue) and INCORRECT LINE between sensor frame and poi (Purple)
+    # Create line between wheelchair center and poi (Blue) and INCORRECT LINE between sensor frame and poi (Purple)
     vec3_geom_1 = LineMesh([sensor_pos_world, platform_poi_pos_world, sensor_pos_world_proj, platform_poi_pos_world_proj ], lines=[[0, 1], [2,3]], radius=0.005, colors=[0.5, 0, 0.5])
     vec3_geom_2 = LineMesh([wheel_chair_pos_world_proj, platform_poi_pos_world_proj], lines=[[0, 1]], radius=0.005, colors=[0, 0, 1])
 
@@ -85,8 +86,8 @@ def main():
 
     print(f"Platform POI in World Frame: {platform_poi_pos_world}")
     print(f"Platform POI in Sensor Frame: {platform_poi_pos_sensor}")
-    print(f"Platform POI in Wheel Chair Frame: {platform_poi_pos_wheel_chair}")
-    print(f"Platform Normal in Wheel Chair Frame: {platform_normal_wheel_chair}")
+    print(f"Platform POI in wheelchair Frame: {platform_poi_pos_wheel_chair}")
+    print(f"Platform Normal in wheelchair Frame: {platform_normal_wheel_chair}")
 
     # print(f"Platform Center in Sensor Frame: {platform_cp_pos_sensor}")
     # print(f"Platform Normal in Sensor Frame: {platform_normal_sensor}")

@@ -438,22 +438,22 @@ def rotate_vectors(vectors, transform):
     return new_vec
 
 def get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, sensor_to_wheel_chair_transform, **kwargs):
-    """Will compute the turning manuever for the wheel chair. CC = Counter Clockwise
+    """Will compute the turning manuever for the wheelchair. CC = Counter Clockwise
 
     Args:
         platform_center_sensor_frame (np.ndarray[3,]): The platform center point in the SENSOR FRAME
-        platform_normal_sensor_frame (np.ndarray[3,]): The platform normal in the SENSOR FRAME. Normal is pointing TOWARDS the wheel chair.
-        sensor_to_wheel_chair_transform (np.ndarray[4X4]): The homogenous transform to transfrom from the SENSOR FRAME to the WHEEL CHAIR FRAME
+        platform_normal_sensor_frame (np.ndarray[3,]): The platform normal in the SENSOR FRAME. Normal is pointing TOWARDS the wheelchair.
+        sensor_to_wheel_chair_transform (np.ndarray[4X4]): The homogenous transform to transfrom from the SENSOR FRAME to the wheelchair FRAME
 
     Returns:
         dict: A dictionary of the maneuver
-            alpha = angle between wheel chair y-axis (forward) and vector from wheel chair to point of interest
-            beta = angle between wheel chair y-axis (forward) and reversed platform normal
-            dist_poi = 2D distance between wheel chair center and point of interest
-            ortho_dist_platform = 2D orthogonal distance between wheel chair center and center of platform
-            first_turn = angle to turn wheel chair to align with vector directing wheel chair to point of interst (alpha)
-            second_turn = angle to turn wheel chair to align with platform normal (-alpha + beta)
-            vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheel chair to poi (wheel chair frame)
+            alpha = angle between wheelchair y-axis (forward) and vector from wheelchair to point of interest
+            beta = angle between wheelchair y-axis (forward) and reversed platform normal
+            dist_poi = 2D distance between wheelchair center and point of interest
+            ortho_dist_platform = 2D orthogonal distance between wheelchair center and center of platform
+            first_turn = angle to turn wheelchair to align with vector directing wheelchair to point of interst (alpha)
+            second_turn = angle to turn wheelchair to align with platform normal (-alpha + beta)
+            vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheelchair to poi (wheelchair frame)
             platform_normal_inverted_unit = 3D unit vector of the inverse of the platform normal 
     """
     platform_center_pos_wheel_chair_frame = tranform_vectors(platform_center_sensor_frame, sensor_to_wheel_chair_transform)
@@ -476,43 +476,43 @@ def compute_2D_angle_difference(vector1, vector2):
     angle = np.degrees(np.arctan2(vector2[1], vector2[0]) - np.arctan2(vector1[1], vector1[0]))
 
     if angle > 180:
-        angle = angle - 360
+        angle = angle - 360 
     elif angle < -180:
         angle = angle + 360
 
     return angle
 
 def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, poi_offset=0.5, debug=False, **kwargs):
-    """Will compute the turning manuever for the wheel chair. CC = Counter Clockwise
-    Assumes that the Wheel Chair reference frame origin is the center of rotation for wheel chair turn commands
+    """Will compute the turning manuever for the wheelchair. CC = Counter Clockwise
+    Assumes that the wheelchair reference frame origin is the center of rotation for wheelchair turn commands
     Maneuvers Steps:
       0. Calculate point of interest (POI) as `platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame`
-      1. Execute rotation of "first_turn" degrees CC. This aligns the wheel chair y-axis to point to the POI
+      1. Execute rotation of "first_turn" degrees CC. This aligns the wheelchair y-axis to point to the POI
       2. Execute forward move (y-axis) "dist_poi" meters
-      3. Execute rotation of "second_turn" degrees CC. This aligns the wheel chair y-axis to platform
+      3. Execute rotation of "second_turn" degrees CC. This aligns the wheelchair y-axis to platform
 
     This assumes perfect control and execution of these commands. In reality you will need feeback control probably for 
     steps 2 and 3. Step 1 is 'probably' not as important to need feedback control.
 
     Args:
-        platform_center_pos_wheel_chair_frame (np.ndarray): The platform center point in the WHEEL CHAIR FRAME
-        platform_normal_wheel_chair_frame (np.ndarray): The platform normal in the WHEEL CHAIR FRAME. Normal is pointing TOWARDS the wheel chair.
+        platform_center_pos_wheel_chair_frame (np.ndarray): The platform center point in the wheelchair FRAME
+        platform_normal_wheel_chair_frame (np.ndarray): The platform normal in the wheelchair FRAME. Normal is pointing TOWARDS the wheelchair.
         debug (bool, optional): Whether to print out data and plot. Defaults to False.
 
     Returns:
         dict: A dictionary of the maneuver
-            alpha = angle between wheel chair y-axis (forward) and vector from wheel chair to point of interest
-            beta = angle between wheel chair y-axis (forward) and reversed platform normal
-            dist_poi = 2D distance between wheel chair center and point of interest
-            ortho_dist_platform = 2D orthogonal distance between wheel chair center and center of platform
-            first_turn = angle to turn wheel chair to align with vector directing wheel chair to point of interst (alpha)
-            second_turn = angle to turn wheel chair to align with platform normal (-alpha + beta)
-            vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheel chair to poi (wheel chair frame)
+            alpha = angle between wheelchair y-axis (forward) and vector from wheelchair to point of interest
+            beta = angle between wheelchair y-axis (forward) and reversed platform normal
+            dist_poi = 2D distance between wheelchair center and point of interest
+            ortho_dist_platform = 2D orthogonal distance between wheelchair center and center of platform
+            first_turn = angle to turn wheelchair to align with vector directing wheelchair to point of interst (alpha)
+            second_turn = angle to turn wheelchair to align with platform normal (-alpha + beta)
+            vec_wheel_chair_to_poi_2D_unit = 2D unit vector from wheelchair to poi (wheelchair frame)
             platform_normal_inverted_unit = 3D unit vector of the inverse of the platform normal 
     """
     platform_poi_pos_wheel_chair_frame = platform_normal_wheel_chair_frame * poi_offset + platform_center_pos_wheel_chair_frame
-    wheel_chair_pos_in_wheel_chair_frame = np.array([0.0,0.0,0.0]) # The position will be 0 in wheel chair frame (origin)
-    wheel_chair_dir_vec_unit = np.array([0.0, 1.0, 0.0]) # forward y-axis is wheel chair direction
+    wheel_chair_pos_in_wheel_chair_frame = np.array([0.0,0.0,0.0]) # The position will be 0 in wheelchair frame (origin)
+    wheel_chair_dir_vec_unit = np.array([0.0, 1.0, 0.0]) # forward y-axis is wheelchair direction
 
     # Orthogonal distance to the platform
     ortho_dist_platform = np.dot(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame)
@@ -537,7 +537,7 @@ def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_nor
                 platform_poi_pos_wheel_chair_frame=platform_poi_pos_wheel_chair_frame)
     if debug:
         print(f"Alpha Angle {alpha:.1f}; Beta Angle: {beta:.1f}")
-        print(f"First Turn CC: {first_turn:.1f} degres; Move Distance: {dist_poi:.2f};  Second Turn: {second_turn:.1f}")
+        print(f"First Turn CC: {first_turn:.1f} degrees; Move Distance: {dist_poi:.2f}; Second Turn: {second_turn:.1f}")
         plot_maneuver(result)
 
     return result
@@ -589,7 +589,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
 
     """
     point_on_plane_unit_vector = plane_normal / np.linalg.norm(plane_normal)
-    point_of_interest = point_on_plane + (0.5 * point_on_plane_unit_vector) # check the assumption
+    point_of_interest = point_on_plane + (0.7 * point_on_plane_unit_vector) # check the assumption
     # threshold = np.linalg.norm(point_of_interest - point_on_plane)
     # import ipdb; ipdb.set_trace()
     
@@ -646,7 +646,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     # dot_prod = np.dot(vec3_2d, vec4_2d)
     # final_turn = np.degrees(np.arccos(dot_prod))
 
-    # TODO Checks on wheel chair position (line test) in relation to poi and plane normal
+    # TODO Checks on wheelchair position (line test) in relation to poi and plane normal
     
 
 

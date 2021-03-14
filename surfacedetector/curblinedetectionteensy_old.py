@@ -31,7 +31,7 @@ from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshe
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
 from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane
-from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance, create_transform, get_turning_manuever
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance
 
 logging.basicConfig(level=logging.INFO)
 
@@ -366,6 +366,10 @@ def colorize_images_open_cv(color_image, depth_image, config):
 
 
 def capture(config, video=None):
+    orientation = 0
+    final_turn = 0
+    orthog_dist = 0
+    distance_of_interest = 0
     # Configure streams
     pipeline, process_modules, filters, proj_mat, t265_device = create_pipeline(config)
     t265_pipeline = t265_device['pipeline']
@@ -383,14 +387,6 @@ def capture(config, video=None):
         frame_height = config['color']['height']
         out_vid = cv2.VideoWriter(video, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (frame_width, frame_height))
 
-    # Create Homogenous Transform from sensor frame to wheel chair frame
-    sensor_mount_frame = config['frames']['sensor_mount']
-    sensor_frame = config['frames']['sensor']
-    sensor_to_wheel_chair_transform = create_transform(np.array(sensor_mount_frame['translation']), sensor_mount_frame['rotation']) \
-        @ create_transform(sensor_frame['translation'], sensor_frame['rotation'])
-
-    # print(sensor_to_wheel_chair_transform)
-    # sys.exit()
     all_records = []
     counter = 0
     try:
@@ -437,38 +433,34 @@ def capture(config, video=None):
                         filtered_top_points = filter_points(top_points)  # <100 us
                         _, height, _, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True)
                         if best_fit_lines:
-                            platform_center_sensor_frame = best_fit_lines[0]['hplane_point']
-                            platform_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
-                            # print(platform_center_sensor_frame, platform_normal_sensor_frame)
-                            result = get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, \
-                                        sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.7), debug=False)
-                            plt.show()
-
-                            orthog_dist = result['ortho_dist_platform']
-                            distance_of_interest = result['dist_poi']
-                            orientation = result['beta']
-                            initial_turn = result['first_turn']
-                            final_turn= result['second_turn']
-
-                            logging.info("Frame #: %s, Orthogonal Distance to Platform: %.02f m, Orientation: %0.1f Degrees, Distance to POI: %.02f m, " \
-                                "First Turn: %.01f degrees, Second Turn: %.01f degrees", 
-                                         counter, orthog_dist, orientation, distance_of_interest, initial_turn, final_turn)
+                            orthog_dist, distance_of_interest, final_turn, orientation, initial_turn = get_theta_and_distance( best_fit_lines[0]['hplane_normal'], \
+                                                                                                                        best_fit_lines[0]['hplane_point'], \
+                                                                                                                        best_fit_lines[0]['plane_normal'])
+                            # square_points, normal_svm, center = hplane(first_plane, second_plane)
+                            # dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
+                            logging.info("Frame #: %s, Orthog_dist: %.02f meters, Distance to center of Curb: %.02f meters, \
+                                         initial_turn: %.01f degrees, final_turn: %.01f degrees, Orientation: %.01f degrees ", 
+                                         counter, orthog_dist, distance_of_interest, initial_turn, final_turn, orientation)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
-                            if len(best_fit_lines) > 1: 
-                                
+                            if len(best_fit_lines) > 2: 
+                                # S
                                 plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
                             have_results = True
                         else:
                             logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-
-                    if initial_turn < 0:
-                        initial_turnsign = 0
+                    if orientation < 0:
+                        orientationsign = 0
                     else:
-                        initial_turnsign = 1
+                        orientationsign = 1
                     
+                    # if initial_turn < 0:
+                    #     initial_turnsign = 0
+                    # else:
+                    #     initial_turnsign = 1
+
                     if final_turn < 0:
                         final_turnsign = 0
                     else:
@@ -479,8 +471,10 @@ def capture(config, video=None):
                     # final_turn, orientation     --> 00.00 (DEGREE)
                     # orientationsign, final_turn --> 0(NEGTIVE) / 1(POSITIVE)
                     ser.write(("{:04.2f}".format(curb_height) + "{:04.2f}".format(distance_of_interest) + \
-                               "{:06.2f}".format(abs(initial_turn)) + str(initial_turnsign) + \
-                               "{:06.2f}".format(abs(final_turn))+ str(final_turnsign) + "\n").encode())
+                               "{:05.2f}".format(abs(final_turn)) + str(final_turnsign) + \
+                               "{:05.2f}".format(abs(orientation))+ str(orientationsign) + "\n").encode())
+                            #    "{:05.2f}".format(abs(initial_turn))+ str(initial_turnsign) + "\n").encode())
+
 
                     # sys.exit()
                     # Plot polygon in rgb frame
@@ -497,8 +491,8 @@ def capture(config, video=None):
                         cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (20,360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Initial Turn: '"{:.2f}" 'deg'.format(initial_turn), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                        cv2.putText(images,'Angle for Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle for initial turn: '"{:.2f}" 'deg'.format(initial_turn), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
@@ -554,10 +548,9 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
-
+            ser.flush()
             # Run capture loop
             capture(config, args.video)
-            ser.flush()
         except yaml.YAMLError as exc:
             logging.exception("Error parsing yaml")
 

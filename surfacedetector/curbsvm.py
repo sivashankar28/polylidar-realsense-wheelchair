@@ -442,8 +442,8 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    # cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    # cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     
