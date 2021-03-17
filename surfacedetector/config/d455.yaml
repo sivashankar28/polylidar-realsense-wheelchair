@@ -42,7 +42,7 @@
       hole_fill: 2 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
     threshold:
       active: true
-      distance: 3.0 # any pixel greater than x is removed
+      distance: 2.0 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns
