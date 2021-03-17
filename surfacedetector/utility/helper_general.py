@@ -69,3 +69,28 @@ def setup_figure_2d():
         ax_.set_ylabel("Y")
         ax_.axis('equal')
     return fig, ax
+
+def plot_fit_lines(ax, fit_lines, annotate=True):
+    next(ax._get_lines.prop_cycler)
+    for fit_line in fit_lines:
+        poly1d_fn = fit_line['fn']
+        if fit_line['flip_axis']:
+            ax.plot(poly1d_fn(fit_line['x_points']), fit_line['x_points'], '-')
+        else:
+            points = fit_line['points']
+            ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
+        mean = fit_line['points'].mean(axis=0)
+        if annotate:
+            ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
+
+def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
+    # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
+    #     top_points, top_normal, min_points_line)
+    fig, ax = setup_figure_2d()
+    plot_points(ax[0], top_points_raw)
+    plot_points(ax[1], top_points_2d)
+    for i in range(top_points_2d.shape[0]):
+        ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
+    plot_fit_lines(ax[1], all_fit_lines, annotate=False)
+    plot_fit_lines(ax[2], best_fit_lines)
+    plt.show()

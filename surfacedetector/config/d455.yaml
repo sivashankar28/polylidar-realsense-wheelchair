@@ -2,8 +2,8 @@
   name: Default Settings for D455 extracting multiple surfaces using Polylidar3D
   advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: false  # Only activate playback if this is true
-    file: "data/D455/test2.bag"
+    enabled: true  # Only activate playback if this is true
+    file: "data/D455/R_R45D_1.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
     repeat: false     # repeat bag after its over
   save:
     video: ""                   # currently doesn't do anything
@@ -56,7 +56,7 @@
   polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
     alpha: 0.0 # must be set to 0.0 if using lmax
     lmax: 0.15 # maximum distance between points in plane for spatial connection
-    z_thresh: 0.20 # enforce point to plane distance constraints during region growing.
+    z_thresh: 0.10 # enforce point to plane distance constraints during region growing.
     norm_thresh: 0.95 # Not used, set to the same as norm_thresh_min. Will deprecate later.
     norm_thresh_min: 0.95 # triangles must have a minimum amount of planarity.
     min_hole_vertices : 10 # minimum number of vertices in a hole to return
@@ -113,3 +113,15 @@
       #   [0, 1, 0],
       #   [0, 0, 1]
       # ]
+  linefitting:
+    # first pass of extracting lines
+    window_size: 3 # window size to smooth points
+    dot_min: 0.97 # minium dot product between adjoining vectors to connect
+    # merging lines
+    max_idx_dist: 5 # maximum numer of point indices between lines
+    max_rmse: 1.0  # maximum RMSE fit of a merged line, ignored
+    min_dot_prod: 0.93 # minium dot product between lines to merge
+    max_ortho_dist: 0.05  # maximum orthogonal distance between two lines to be merged
+    # Final cleanup
+    min_points_line: 12  # minimum number of points in a line (n * .05 cm)
+

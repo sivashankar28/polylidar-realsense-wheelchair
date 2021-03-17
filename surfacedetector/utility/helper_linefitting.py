@@ -31,6 +31,8 @@ from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
 import matplotlib.pyplot as plt
 
+from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points
+
 
 def choose_plane(first_plane, second_plane):
     first_centroid = first_plane['point']
@@ -90,7 +92,7 @@ def get_rmse(x_points, y_points, fn):
     return np.sqrt(np.mean((predictions-targets)**2))
 
 
-def fit_line(points, idx, max_slope=2.0):
+def fit_line(points, idx, max_slope=2.0, **kwargs):
     """Will fit a line to the points specified by index
 
     Args:
@@ -142,12 +144,12 @@ def fit_line(points, idx, max_slope=2.0):
         dir_vec = np.array([run, coef[0] * run])
     dir_vec = dir_vec / np.linalg.norm(dir_vec)
     res = dict(points=points_, x_points=x_points, y_points=y_points, fn=poly1d_fn,
-               rmse=rmse, dir_vec=dir_vec, idx=[idx[0], last_idx], flip_axis=flip_axis)
+               rmse=rmse, dir_vec=dir_vec, idx=[idx[0], last_idx], flip_axis=flip_axis, points_2d_orig=points)
     logging.debug("Fit a new line: %s", res)
     return res
 
 
-def extract_lines(pc, window_size=3, dot_min=0.90, **kwargs):
+def extract_lines(pc, window_size=3, dot_min=0.95, **kwargs):
     """Extract a first approximation of all lines in 2D line string
 
     Args:
@@ -219,7 +221,7 @@ def orthogonal_distance(line_point, line_vec, points):
     return median
 
 
-def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05):
+def check_merge_line(points, line, line_next, i, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05, **kwargs):
     idx_diff = line_next['idx'][0] - line['idx'][1]
     dot_prod = np.dot(line['dir_vec'], line_next['dir_vec'])
     logging.debug("attempting to merge line %s with %s, dot_prod: %s, idx_diff: %s",
@@ -245,7 +247,7 @@ def check_merge_line(points, line, line_next, i, max_idx_dist=3, max_rmse=1.0, m
     return False, None
 
 
-def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.90, max_ortho_dist=0.05, **kwargs):
+def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05, **kwargs):
     """Merges lines that may be close to each other
 
     Args:
@@ -369,10 +371,15 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
     """
     for line in best_fit_lines:
         pts = line['points']
+        points_2d_orig = line['points_2d_orig']
         line['points_3d'] = np.append(
             pts, np.ones((pts.shape[0], 1)) * height, axis=1)
         line['points_3d'] = rotate_data_planar(
             line['points_3d'], top_normal, True)
+        line['points_3d_orig'] = np.append(
+            points_2d_orig, np.ones((points_2d_orig.shape[0], 1)) * height, axis=1)
+        line['points_3d_orig'] = rotate_data_planar(
+            line['points_3d_orig'], top_normal, True)
         line['dir_vec_3d'] = np.array(
             [[line['dir_vec'][0], line['dir_vec'][1], 0]])
         line['dir_vec_3d'] = rotate_data_planar(
@@ -391,15 +398,27 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
     return best_fit_lines
 
 
+def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
+    # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
+    #     top_points, top_normal, min_points_line)
+    fig, ax = setup_figure_2d()
+    plot_points(ax[0], top_points_raw)
+    plot_points(ax[1], top_points_2d)
+    for i in range(top_points_2d.shape[0]):
+        ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
+    plot_fit_lines(ax[1], all_fit_lines, annotate=False)
+    plot_fit_lines(ax[2], best_fit_lines)
+    plt.show()
+
 def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
     height = np.mean(top_points_3d[:, 2])
     t2 = time.perf_counter()
-    all_fit_lines = extract_lines(top_points_2d)
+    all_fit_lines = extract_lines(top_points_2d, **kwargs)
     t3 = time.perf_counter()
-    best_fit_lines = merge_lines(top_points_2d, all_fit_lines)
+    best_fit_lines = merge_lines(top_points_2d, all_fit_lines, **kwargs)
     t4 = time.perf_counter()
     ms1 = (t2-t1) * 1000
     ms2 = (t3-t2) * 1000
@@ -410,6 +429,8 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
         fit_line for fit_line in best_fit_lines if fit_line['points'].shape[0] >= min_points_line]
     best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
     best_fit_lines = filter_lines(best_fit_lines, **kwargs)
+
+
 
     return top_points_2d, height, all_fit_lines, best_fit_lines
 
