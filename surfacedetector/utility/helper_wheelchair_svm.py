@@ -91,6 +91,7 @@ def analyze_planes_updated(geometric_planes, cluster_dist=0.05):
         # highly segmented plane, I would just choose the largest one?
         # for now return an error. Force having two planes
         logging.error("Only one set of polygons were found that all lie on the same geometric plane. Am expecting TWO. One for ground and one for curb surface")
+        return 0.0, None, None
     elif number_of_clusters.shape[0] == 2:
         logging.debug("Two clusters found. Each cluster may have 1 or more polygons.")
         # Need to choose one polygon from each cluster. Choose by max area
@@ -155,7 +156,7 @@ def analyze_planes(geometric_planes):
     second_plane_final = None
     first_plane_final_area = 0.0
     second_plane_final_area = 0.0
-    
+
     for pair in itertools.combinations(range(len(geometric_planes_for_normal)), 2):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]

@@ -456,7 +456,7 @@ def capture(config, video=None):
                                          counter, orthog_dist, orientation, distance_of_interest, initial_turn, final_turn)
                             
                             plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
-                            plot_points(best_fit_lines[0]['points_3d_orig'], proj_mat, color_image, config)
+                            # plot_points(best_fit_lines[0]['points_3d_orig'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
                                 plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
                             have_results = True
@@ -484,7 +484,7 @@ def capture(config, video=None):
                         cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.imshow('RealSense Color/Depth (Aligned)', images)
-                        # visualize_2d(top_points_2d, top_points_2d, all_fit_lines, best_fit_lines)
+                        visualize_2d(top_points_2d, top_points_2d, all_fit_lines, best_fit_lines)
                     
                     if video:
                         out_vid.write(images)
