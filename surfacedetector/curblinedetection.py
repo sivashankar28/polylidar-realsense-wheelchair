@@ -438,7 +438,8 @@ def capture(config, video=None):
                         filtered_top_points = filter_points(top_points)  # <100 us
                         top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True, **config['linefitting'])
                         if best_fit_lines:
-                            platform_center_sensor_frame = best_fit_lines[0]['hplane_point']
+                            #If there are two lines only choose the first one
+                            platform_center_sensor_frame = best_fit_lines[0]['hplane_point'] 
                             platform_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
                             # print(platform_center_sensor_frame, platform_normal_sensor_frame)
                             result = get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, \
@@ -484,7 +485,7 @@ def capture(config, video=None):
                         cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                         cv2.imshow('RealSense Color/Depth (Aligned)', images)
-                        visualize_2d(top_points_2d, top_points_2d, all_fit_lines, best_fit_lines)
+                        # visualize_2d(top_points_2d, top_points_2d, all_fit_lines, best_fit_lines)
                     
                     if video:
                         out_vid.write(images)

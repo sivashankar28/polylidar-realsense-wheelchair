@@ -2,7 +2,7 @@ import sys
 import open3d as o3d
 import matplotlib.pyplot as plt
 import numpy as np
-from ..surfacedetector/utility/line_mesh import LineMesh
+# from surfacedetector/utility/line_mesh import LineMesh
 from surfacedetector.utility.line_mesh import LineMesh
 from scripts.o3d_util import create_grid, create_box, tranform_vectors, rotate_vectors, create_transform, create_point
 from surfacedetector.utility.helper_linefitting import compute_turning_manuever
