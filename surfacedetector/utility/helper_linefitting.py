@@ -48,9 +48,9 @@ def choose_plane(first_plane, second_plane):
         return first_plane
 
 
-def filter_points(top_points, max_z=0.5, max_dist=0.05):
+def filter_points(top_points, max_z=0.5, max_dist=0.05, min_z=0.6):
     """Filters and simplifies 3D points belonging to a continuos line string.
-
+        Also filter points that are are less than min_z distance away
 
     Args:
         top_points (ndarray): 3D Line String
@@ -64,7 +64,7 @@ def filter_points(top_points, max_z=0.5, max_dist=0.05):
         simplify_radial_dist_3d(MatrixDouble(top_points), max_dist))
     nearest_z = top_points_simplified[:, 2].min()
     far_z = nearest_z + max_z
-    a1 = top_points_simplified[:, 2] < far_z
+    a1 = (top_points_simplified[:, 2] < far_z) & (top_points_simplified[:, 2] > min_z)
 
     np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
@@ -295,7 +295,22 @@ def merge_lines(points, lines, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.93, 
     return final_lines
 
 
-def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=True, **kwargs):
+def sort_lines(best_fit_lines, w1=0.75, w2=0.25, wheel_chair_direction_vec_sensor_frame=[0,0,1], too_close=0.5):
+    max_dist = max(best_fit_lines, key=lambda a: a['dist_to_line'])['dist_to_line'] + 0.5
+    for line in best_fit_lines:
+        dist_to_line = line['dist_to_line']
+        dist_to_line_norm = dist_to_line / max_dist
+        ang_dist_norm = np.abs(np.dot(wheel_chair_direction_vec_sensor_frame, line['hplane_normal']))
+        sort_metric = (1 - dist_to_line_norm) * w1 +  ang_dist_norm * w2
+        # print(f"Dist to line: {dist_to_line:.2f}, dist to line norm: {dist_to_line_norm:.2f}, ang_dist_norm: {ang_dist_norm:.2f},  sort_metric: {sort_metric:.2f}")
+        if dist_to_line < too_close:
+            sort_metric -= 1
+        line['sort_metric'] = sort_metric
+    return sorted(best_fit_lines, key=lambda i: i['sort_metric'], reverse=True)
+
+
+def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_line=True, 
+                 wheel_chair_direction_vec_sensor_frame=[0,0,1], **kwargs):
     """Filter lines to a max of 2, they must be orthogonal
     If multiple pairs can be found, find the one that maximizes:
     metric = w1 * (1- dot_prod) * w2 * idx_length
@@ -305,7 +320,7 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
         best_fit_lines (List): List of Lines
         max_dot (float, optional): Max dot product if more than two lines. Defaults to 0.2.
         w1 (float, optional): Weight of dot product. Defaults to 0.75.
-        w2 (float, optional): Weight of Line Lenght. Defaults to 0.25
+        w2 (float, optional): Weight of Line Length. Defaults to 0.25
 
     Returns:
         [type]: [description]
@@ -314,9 +329,10 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
     if return_only_one_line and best_fit_lines:
         # only return one line, choose the closest line
         # TODO RMSE and Length metric as well
-        for line in best_fit_lines:
-            line['distance'] = np.linalg.norm(line['hplane_point'])
-        return sorted(best_fit_lines, key=lambda i: i['distance'])[:1]
+        # for line in best_fit_lines:
+        #     line['distance'] = np.linalg.norm(line['hplane_point'])
+        sorted_lines = sort_lines(best_fit_lines, w1=w1, w2=w2, wheel_chair_direction_vec_sensor_frame=wheel_chair_direction_vec_sensor_frame )
+        return sorted_lines[0:1]
     elif len(best_fit_lines) <= 1:
         best_pair = best_fit_lines
     else:
@@ -332,10 +348,13 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
             if metric > best_metric and dot_prod < np.abs(max_dot):
                 best_pair = [line1, line2]
                 best_metric = metric
-    for line in best_fit_lines:
-        line['distance'] = np.linalg.norm(line['hplane_point'])
 
-    return sorted(best_pair, key=lambda i: i['distance'])
+    sorted_lines = sort_lines(best_fit_lines, w1=w1, w2=w2, wheel_chair_direction_vec_sensor_frame=wheel_chair_direction_vec_sensor_frame )
+    return sorted_lines
+
+    # for line in best_fit_lines:
+    #     line['distance'] = np.linalg.norm(line['hplane_point'])
+    # return sorted(best_pair, key=lambda i: i['distance'])
 
 
 def make_square(cent, ax1, ax2, normal, w=0.3, h=0.25):
@@ -358,7 +377,8 @@ def project_points_geometric_plane(points, normal, point_on_plane):
     return projected_points
 
 
-def recover_3d_lines(best_fit_lines, top_normal, height):
+def recover_3d_lines(best_fit_lines, top_normal, height, 
+                     wheel_chair_origin_sensor_frame=[-0.34, 0, 0]):
     """This will recover 3D information of the lines
 
     Args:
@@ -394,6 +414,7 @@ def recover_3d_lines(best_fit_lines, top_normal, height):
         line['hplane_point'] = line['points_3d'].mean(axis=0)
         line['square_points'] = make_square(
             line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
+        line['dist_to_line'] = np.linalg.norm(line['hplane_point'] - wheel_chair_origin_sensor_frame)
 
     return best_fit_lines
 
