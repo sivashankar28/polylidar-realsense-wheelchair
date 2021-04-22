@@ -77,16 +77,16 @@
       min_total_weight: 0.05
   polygon:
     frameskip: # criterions to skip polygon generation given input data
-      depth_min_valid: 0.4 # minimum percentage needed from depth image pixels with valid data
+      depth_min_valid: 0.04 # minimum percentage needed from depth image pixels with valid data
     postprocess: # post processing of polygons returned from polylidar for ground/obstacle identification
       filter: # obstacles must have these characteristics
         hole_area:
-          min: 0.10   # m^2
+          min: 0.025   # m^2
           max: 0.785 # m^2
         hole_vertices:
           min: 6
         plane_area:
-          min: .075 # m^2
+          min: .05 # m^2
       # These parameters correspond to Shapely polygon geometry operations
       positive_buffer: 0.000 # m, Positively expand polygon.  Fills in small holes
       negative_buffer: 0.000 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon
@@ -96,7 +96,7 @@
     sensor_mount:
       # In relation to coordinate frame of the wheel chair which is (y-forward, x-right, z-up) and origin is on floor BETWEEN WHEELS
       #translation [0.5, 0.0, 0.5] # Example: this is saying the sensor mount is 0.5 meters to the right and 0.5 up from wheel chair origin 
-      translation: [0.34, 0.25, 0.7] # TODO UPDATE - wheelchair is 68 cm wide 
+      translation: [0.34, 0.0, 0.7] # TODO UPDATE - wheelchair is 68 cm wide 
       rotation:
         roll: 0.0
         pitch: -34.0 # TODO UPDATE - Note that this will not change turning manuever answers
@@ -114,3 +114,15 @@
       #   [0, 1, 0],
       #   [0, 0, 1]
       # ]
+  linefitting:
+    # first pass of extracting lines
+    window_size: 3 # window size to smooth points
+    dot_min: 0.97 # minium dot product between adjoining vectors to connect
+    # merging lines
+    max_idx_dist: 5 # maximum numer of point indices between lines
+    max_rmse: 1.0  # maximum RMSE fit of a merged line, ignored
+    min_dot_prod: 0.93 # minium dot product between lines to merge
+    max_ortho_dist: 0.05  # maximum orthogonal distance between two lines to be merged
+    # Final cleanup
+    min_points_line: 7  # minimum number of points in a line (n * .05 cm)
+
