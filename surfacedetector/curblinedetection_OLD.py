@@ -1,4 +1,3 @@
-import serial
 import logging
 import sys
 import argparse
@@ -18,8 +17,11 @@ import open3d as o3d
 import pandas as pd
 from joblib import dump, load
 
+
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2Beta, IcoCharts
+from fastga import GaussianAccumulatorS2, IcoCharts
+
+logging.basicConfig(level=logging.INFO)
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -30,9 +32,9 @@ from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_pr
 from surfacedetector.utility.helper_mesh import create_meshes_cuda, create_meshes_cuda_with_o3d, create_meshes
 from surfacedetector.utility.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 from surfacedetector.utility.helper_tracking import get_pose_matrix, cycle_pose_frames, callback_pose
-from surfacedetector.utility.helper_wheelchair_svm import analyze_planes, hplane, get_theta_and_distance
-
-logging.basicConfig(level=logging.INFO)
+from surfacedetector.utility.helper_wheelchair_svm import analyze_planes_updated
+from surfacedetector.utility.helper_linefitting import choose_plane, extract_lines_wrapper, filter_points, get_theta_and_distance, create_transform, get_turning_manuever
+from surfacedetector.utility.helper_general import visualize_2d
 
 
 THIS_DIR = path.dirname(__file__)
@@ -47,7 +49,7 @@ IDENTITY_MAT = MatrixDouble(IDENTITY)
 
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-# ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+
 
 def create_pipeline(config: dict):
     """Sets up the pipeline to extract depth and rgb frames
@@ -374,7 +376,7 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2(level=config['fastga']['level'])
     ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
 
     if video:
@@ -382,6 +384,14 @@ def capture(config, video=None):
         frame_height = config['color']['height']
         out_vid = cv2.VideoWriter(video, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (frame_width, frame_height))
 
+    # Create Homogenous Transform from sensor frame to wheelchair frame
+    sensor_mount_frame = config['frames']['sensor_mount']
+    sensor_frame = config['frames']['sensor']
+    sensor_to_wheel_chair_transform = create_transform(np.array(sensor_mount_frame['translation']), sensor_mount_frame['rotation']) \
+        @ create_transform(sensor_frame['translation'], sensor_frame['rotation'])
+
+    # print(sensor_to_wheel_chair_transform)
+    # sys.exit()
     all_records = []
     counter = 0
     try:
@@ -399,8 +409,7 @@ def capture(config, video=None):
                 continue
             t1 = time.perf_counter()
             counter += 1
-            if counter == 5:
-                import ipdb; ipdb.set_trace()
+            if counter < 1:
                 continue
 
             try:
@@ -409,6 +418,8 @@ def capture(config, video=None):
                     euler_t265 = get_pose_matrix(meta['ts'])
                     logging.info('euler_t265: %r', euler_t265)
 
+                # flag to write results
+                have_results = False
                 if config['show_polygon']:
                     # planes, obstacles, geometric_planes, timings, o3d_mesh = get_polygon(depth_image, config, ll_objects, **meta)
                     planes, obstacles, geometric_planes, timings = get_polygon(depth_image, config, ll_objects, **meta)
@@ -416,21 +427,68 @@ def capture(config, video=None):
                     timings['t_check_frames'] = (t1 - t0) * 1000
                     all_records.append(timings)
 
-                    curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
-                    
+                    curb_height, first_plane, second_plane = analyze_planes_updated(geometric_planes)
+                    fname = config['playback']['file'].split('/')[1].split('.')[0]
+                    # dump(dict(first_plane=first_plane, second_plane=second_plane), f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
                     
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        square_points, normal_svm, center = hplane(first_plane, second_plane)
-                        dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
-                        logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
-                        plot_points(square_points, proj_mat, color_image, config)
-                        # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
+                        top_plane = choose_plane(first_plane, second_plane)
+                        top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
+                        filtered_top_points = filter_points(top_points)  # <100 us
+                        top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=False, **config['linefitting'])
+                        # print(len(best_fit_lines))
+                        if best_fit_lines:
+                            # get the orientations for both lines
+                            line1_center_sensor_frame = best_fit_lines[0]['hplane_point']
+                            line1_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
+                            line1_result = get_turning_manuever(line1_center_sensor_frame, line1_normal_sensor_frame, \
+                                sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.7), debug=False)
+                            
+                            line2_center_sensor_frame = best_fit_lines[1]['hplane_point']
+                            line2_normal_sensor_frame = best_fit_lines[1]['hplane_normal']
+                            line2_result = get_turning_manuever(line2_center_sensor_frame, line2_normal_sensor_frame, \
+                                sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.7), debug=False)    
+
+                            line1_orientation = abs(line1_result['beta'])
+                            line2_orientation = abs(line2_result['beta'])
+
+                            # compare orientations from both lines
+                            # choose the line that we need to turn less
+                            if line1_orientation <= line2_orientation:
+                                orthog_dist = line1_result['ortho_dist_platform']
+                                distance_of_interest = line1_result['dist_poi']
+                                orientation = line1_result['beta']
+                                initial_turn = line1_result['first_turn']
+                                final_turn= line1_result['second_turn']
+                            else:
+                                orthog_dist = line2_result['ortho_dist_platform']
+                                distance_of_interest = line2_result['dist_poi']
+                                orientation = line2_result['beta']
+                                initial_turn = line2_result['first_turn']
+                                final_turn= line2_result['second_turn']
+
+                            #If there are two lines only choose the first one
+                            # platform_center_sensor_frame = best_fit_lines[0]['hplane_point'] 
+                            # platform_normal_sensor_frame = best_fit_lines[0]['hplane_normal']
+                            # print(platform_center_sensor_frame, platform_normal_sensor_frame)
+                            # result = get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, \
+                                        # sensor_to_wheel_chair_transform, poi_offset=config.get('poi_offset', 0.7), debug=False)
+                            plt.show()
+                            logging.info("Frame #: %s, Orthogonal Distance to Platform: %.02f m, Orientation: %0.1f Degrees, Distance to POI: %.02f m, " \
+                                "First Turn: %.01f degrees, Second Turn: %.01f degrees", 
+                                         counter, orthog_dist, orientation, distance_of_interest, initial_turn, final_turn)
+                            
+                            plot_points(best_fit_lines[0]['square_points'], proj_mat, color_image, config)
+                            # plot_points(best_fit_lines[0]['points_3d_orig'], proj_mat, color_image, config)
+                            if len(best_fit_lines) > 2: 
+                                plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
+                            have_results = True
+                        else:
+                            logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    # ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta)+ "\n").encode())
-                    # ser.write(("{:.2f}".format(dist)+"\n").encode())
-                    # ser.write(("{:.2f}".format(theta)+"\n").encode())
+
                     # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -442,11 +500,15 @@ def capture(config, video=None):
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
-                    cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    # cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    # cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    cv2.imshow('RealSense Color/Depth (Aligned)', images)
-                    
+                    if have_results:
+                        cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (20,360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orthogonal Distance: '"{:.2f}" 'm'.format(orthog_dist), (20,380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Distance to Point of Interest: '"{:.2f}" 'm'.format(distance_of_interest), (20,400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Initial Turn: '"{:.2f}" 'deg'.format(initial_turn), (20,420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Orientation: '"{:.2f}" 'deg'.format(orientation), (20,440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.putText(images,'Angle for final turn: '"{:.2f}" 'deg'.format(final_turn), (20,460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                        cv2.imshow('RealSense Color/Depth (Aligned)', images)
+                        # visualize_2d(top_points_2d, top_points_2d, all_fit_lines, best_fit_lines)
                     
                     if video:
                         out_vid.write(images)
@@ -463,9 +525,7 @@ def capture(config, video=None):
                         plt.imshow(np.asarray(ll_objects['ico'].mask))
                         plt.show()
                         plt.imshow(np.asarray(ll_objects['ico'].image))
-                        plt.show()
-
-                        # import ipdb; ipdb.set_trace()
+                        plt.show()                  
                     
 
                     to_save_frames = config['save'].get('frames')
@@ -474,9 +534,9 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f; Curb Height: %.2f",
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f",
                 #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
-                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'] curb_height)
+                #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'])
                 logging.info(f"Curb Height: %.2f", curb_height)
                 
             except Exception as e:
@@ -501,7 +561,7 @@ def main():
     with open(args.config) as file:
         try:
             config = yaml.safe_load(file)
-            # ser.flush()
+
             # Run capture loop
             capture(config, args.video)
         except yaml.YAMLError as exc:

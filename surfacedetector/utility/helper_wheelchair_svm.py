@@ -9,6 +9,7 @@ from polylidar import HalfEdgeTriangulation
 from surfacedetector.utility.helper_ransac import estimate_plane
 
 from sklearn import svm
+from scipy.cluster.hierarchy import linkage, fcluster
 import matplotlib.pyplot as plt 
 from mpl_toolkits.mplot3d import axis3d
 
@@ -36,6 +37,81 @@ def extract_geometric_plane(polygon: Polygon, plane_triangle_indices, tri_mesh: 
     return dict(point=centroid, normal=normal, all_points=all_points, area=polygon.area, normal_ransac=normal_ransac)
 
 
+def analyze_planes_updated(geometric_planes, cluster_dist=0.05):
+    """This will analyze all geometric planes that have been extracted and find the curb height
+    Args:
+        geometric_planes (List[dict]): A list of dicts representing the geometric planes
+    Returns:
+        float: Height of curb in meters
+    """
+
+    # This code will find the ground normal index, the index into geometric_planes
+    # with the largest area of surfaces (e.g., the street and sidewalk)
+    # if len(geometric_planes) < 2:
+    #     return 0.0, None, None
+    max_area = 0.0
+    ground_normal_index = 0
+    mean_normal_ransac = np.array([0.0, 0.0, 0.0])
+    at_least_two_planes = False
+    # import ipdb; ipdb.set_trace()
+    for i, geometric_planes_for_normal in enumerate(geometric_planes):
+        if len(geometric_planes_for_normal) > 1:
+            at_least_two_planes = True
+            total_area = 0.0
+            total_normal_ransac = np.array([0.0, 0.0, 0.0])
+            for j, plane in enumerate(geometric_planes_for_normal):
+                logging.debug(
+                    f"Plane {j} - Normal: {plane['normal']:}, Ransac Normal: {plane['normal_ransac']:}, Point: {plane['point']:}")
+                # np.save(f'scratch/plane_{i}_{j}.npy', plane['all_points'])
+                total_normal_ransac += plane['normal_ransac'] * plane['area']
+                total_area += plane['area']
+            if total_area > max_area:
+                max_area = total_area
+                ground_normal_index = i
+                mean_normal_ransac = total_normal_ransac / total_area
+                mean_normal_ransac = mean_normal_ransac / np.linalg.norm(mean_normal_ransac) * -1
+    if not at_least_two_planes:
+        return 0.0, None, None
+    # This code will find the maximum orthogonal distance between any tow pair of surfaces with
+    # the same normal
+    # import ipdb; ipdb.set_trace()
+    # ipdb.set_trace()
+    geometric_planes_for_normal = geometric_planes[ground_normal_index]
+    # ipdb.set_trace()
+    offsets = []
+    for plane in geometric_planes_for_normal:
+        centroid = plane['point']
+        offset = np.dot(centroid, mean_normal_ransac) # projection of centrod of geometric plane onto its normal. This gives plane offsets
+        offsets.append([offset]) # offsets is [[0], [0], [4], [4]], linkage will then cluster index 0,1 and then 2,3
+    Z = linkage(offsets, 'single')
+    clusters = fcluster(Z, cluster_dist, criterion='distance') - 1 # index starts at 1, so subtract
+
+    number_of_clusters = np.unique(clusters)
+    if number_of_clusters.shape[0] <= 1:
+        # highly segmented plane, I would just choose the largest one?
+        # for now return an error. Force having two planes
+        logging.error("Only one set of polygons were found that all lie on the same geometric plane. Am expecting TWO. One for ground and one for curb surface")
+        return 0.0, None, None
+    elif number_of_clusters.shape[0] == 2:
+        logging.debug("Two clusters found. Each cluster may have 1 or more polygons.")
+        # Need to choose one polygon from each cluster. Choose by max area
+        mask_first = clusters == 0
+        mask_second = clusters == 1
+        indices_first = np.flatnonzero(mask_first)
+        indices_second = np.flatnonzero(mask_second)
+        # ipdb.set_trace()
+        first_planes = [geometric_planes_for_normal[index] for index in indices_first]
+        second_planes = [geometric_planes_for_normal[index] for index in indices_second]
+
+        first_plane = sorted(first_planes, key = lambda plane: plane['area'], reverse=True)[0]
+        second_plane = sorted(second_planes, key = lambda plane: plane['area'], reverse=True)[0]
+        orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
+        return orthoganal_distance, first_plane, second_plane
+    elif number_of_clusters.shape[0] > 2:
+        logging.error("3 or more sets of polygons were found that have large orthogonal seperation from eachother. Am expecting only TWO. One for ground and one for curb surface")
+        return 0.0, None, None
+    
+
 def analyze_planes(geometric_planes):
     """This will analyze all geometric planes that have been extracted and find the curb height
     Args:
@@ -52,6 +128,7 @@ def analyze_planes(geometric_planes):
     ground_normal_index = 0
     mean_normal_ransac = np.array([0.0, 0.0, 0.0])
     at_least_two_planes = False
+    import ipdb; ipdb.set_trace()
     for i, geometric_planes_for_normal in enumerate(geometric_planes):
         if len(geometric_planes_for_normal) > 1:
             at_least_two_planes = True
@@ -79,23 +156,27 @@ def analyze_planes(geometric_planes):
     second_plane_final = None
     first_plane_final_area = 0.0
     second_plane_final_area = 0.0
-    
+
     for pair in itertools.combinations(range(len(geometric_planes_for_normal)), 2):
         # print(pair)
         first_plane = geometric_planes_for_normal[pair[0]]
         second_plane = geometric_planes_for_normal[pair[1]]
-
+        if first_plane['area'] > first_plane_final_area:
+            first_plane_final = first_plane
+            first_plane_final_area = first_plane['area']
+        if second_plane['area'] > second_plane_final_area:
+            second_plane_final = second_plane
+            second_plane_final_area = second_plane['area']
         orthoganal_distance = np.abs(mean_normal_ransac.dot(first_plane['point'] - second_plane['point']))
+
         if orthoganal_distance > max_orthogonal_distance:
             max_orthogonal_distance = orthoganal_distance
-            first_plane_final = first_plane
-            second_plane_final = second_plane
     
 
     logging.debug(f"Curb Height: {max_orthogonal_distance:}")
     return max_orthogonal_distance, first_plane_final, second_plane_final
 
-def make_square(cent, ax1, ax2, normal, w=0.75, h=0.25):
+def make_square(cent, ax1, ax2, normal, w=1.0, h=0.25):
     p1 = cent + h * ax1 + 0.5 * w * ax2 
     p2 = cent + h * ax1 - 0.5 * w * ax2
     p3 = cent - 0.5 * w * ax2 
@@ -117,6 +198,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     diff = np.array([0.0,0.0,0.0]) - point_on_plane
     dist = np.dot(diff, plane_normal)
     dist = np.abs(dist)
+    
 
     vectors = np.array([[0.0, 0.0, -1.0], plane_normal])
     vectors_proj = project_points_geometric_plane(vectors, ground_normal, np.array([0.0, 0.0, 0.0]))
@@ -127,6 +209,7 @@ def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     vec2 = vec2 / np.linalg.norm(vec2)
 
     a = np.dot(vec1, vec2)
+    # import ipdb; ipdb.set_trace()
     theta = np.degrees(np.arccos(a))
     cross = np.cross(vec1, vec2)
 

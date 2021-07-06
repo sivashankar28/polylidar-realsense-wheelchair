@@ -1,10 +1,9 @@
 ---
-  name: Default Settings for D415 extracting multiple surfaces using Polylidar3D
-  advanced: "surfacedetector/config/json/high_accuracy.json" # JSON file path holding advanced settings
+  name: Default Settings for D455 extracting multiple surfaces using Polylidar3D
+  advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: false     # Only activate playback if this is true
-    file: "data/D415/curbascend.bag"
-    # file: "data/20200618_081754.bag"
+    enabled: true  # Only activate playback if this is true
+    file: "data/D455/Error/R_M0D_0.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
     repeat: false     # repeat bag after its over
   save:
     video: ""                   # currently doesn't do anything
@@ -13,37 +12,37 @@
   show_images: true
   show_polygon: true
   color: # RGB Camera Settings
-    width: 424 #424
-    height: 240 #240
-    framerate: 30
+    width: 848  #424
+    height: 480 #240
+    framerate: 60
   depth: # Depth Camera Settings
-    width: 424 #424
-    height: 240 #240
-    framerate: 30
+    width: 848 #424
+    height: 480 #240
+    framerate: 60
   tracking: # T265 Camera Setting (Optional)
-    enabled:  false # Leave as false if you don't want to stream T265 in parallel
+    enabled:  false  # Leave as false if you don't want to stream T265 in parallel
     playback: # If desire playback with tracking then point to the bag file for the T265
               # Note that RealSense viewer cant record two devices into one bag file.
               # Hence why you need to point to a secondary bag file.
-      file: "data/D415/curbmodel1.bag"
+      file: "data/D455/T265/case.bag"
   filters: # Any realsense filters you wish to apply
     decimation:
       active: true
-      magnitude: 1 # can be 2, 4, 8
+      magnitude: 3 # can be 2, 4, 8
     temporal:
       active: true
-      smooth_alpha: 0.30 # the weight with default value 0.4, between 1 and 0 -- 1 means 100% weight from the current pixel
+      smooth_alpha: 0.60 # the weight with default value 0.4, between 1 and 0 -- 1 means 100% weight from the current pixel
       smooth_delta: 60.0 # the filter threshold for edge classification and preserving with default value of 20 depth increments
-      persistence_control: 2 # 0 = disabled , 1 = Valid in 8/8, 2 = Valid in 2/last 3
+      persistence_control: 3 # 0 = disabled , 1 = Valid in 8/8, 2 = Valid in 2/last 3
     spatial:
       active: true
-      smooth_alpha: 0.25 # The weight of the current pixel for smoothing is bounded within [25..100]%
-      smooth_delta: 6.0 # The depth gradient below which the smoothing will occur as number of depth levels
-      magnitude: 2 # Number of iteration for filter
-      hole_fill: 1 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
+      smooth_alpha: 0.75 # The weight of the current pixel for smoothing is bounded within [25..100]%
+      smooth_delta: 1 # The depth gradient below which the smoothing will occur as number of depth levels
+      magnitude: 3 # Number of iteration for filter
+      hole_fill: 2 # 0-disabled, 1=2 pixel radius, 3=4 pixel, 4=8 pixel, 5=16 pixel, 6=unlimited
     threshold:
       active: true
-      distance: 2.5 # any pixel greater than x is removed
+      distance: 2.0 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
     stride: 1       # skip rows/columns
@@ -52,21 +51,21 @@
       _lambda: 1.0 # weight factor for laplacian update
       kernel_size: 3 # only changes for laplacian
       loops_bilateral: 3 # how many iterations
-      sigma_length: 0.1 # std of distance between triangles centroids
-      sigma_angle: 0.25 # std of distance between triangles normals
+      sigma_length: 0.25 # std of distance between triangles centroids
+      sigma_angle: 0.10 # std of distance between triangles normals
   polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
-    alpha: 0.15 # must be set to 0.0 if using lmax
-    lmax: 0.05 # maximum distance between points in plane for spatial connection
-    z_thresh: 0.1 # enforce point to plane distance constraints during region growing.
-    norm_thresh: 0.94 # Not used, set to the same as norm_thresh_min. Will deprecate later.
-    norm_thresh_min: 0.94 # triangles must have a minimum amount of planarity.
+    alpha: 0.0 # must be set to 0.0 if using lmax
+    lmax: 0.15 # maximum distance between points in plane for spatial connection
+    z_thresh: 0.03 # enforce point to plane distance constraints during region growing.
+    norm_thresh: 0.95 # Not used, set to the same as norm_thresh_min. Will deprecate later.
+    norm_thresh_min: 0.95 # triangles must have a minimum amount of planarity.
     min_hole_vertices : 10 # minimum number of vertices in a hole to return
     min_triangles: 500 # minimum number of triangles needed to make a plane
   fastga: # Parameters used for dominant plane normal estimation
-    level: 3 # refinement level of the gaussian accumulator
-    down_sample_fraction: 0.30 # only use X% of triangle normals from mesh for integration, lower the faster
+    level: 6 # refinement level of the gaussian accumulator
+    down_sample_fraction: 0.15 # only use X% of triangle normals from mesh for integration, lower the faster
     find_peaks_kwargs: # peak detection arguments
-      threshold_abs: 10 # [0-255], minimum value of normalized histogram of S2 to be a peak
+      threshold_abs: 30 # [0-255], minimum value of normalized histogram of S2 to be a peak
       min_distance: 1 # 1 = 3X3 kernel for peak detector. I recommend to not change
       exclude_border: true
       indices: false # must return mask
@@ -74,7 +73,7 @@
       t: 0.28 # min distance in 3D space of peaks (surface normals on sphere) before merging 
       criterion: 'distance'
     average_filter: # A merge group must have at least x% of value in all of histogram, this doesn't have much meaning and will probably be deprecated
-      min_total_weight: 0.05
+      min_total_weight: 0.1
   polygon:
     frameskip: # criterions to skip polygon generation given input data
       depth_min_valid: 0.04 # minimum percentage needed from depth image pixels with valid data
@@ -96,7 +95,7 @@
     sensor_mount:
       # In relation to coordinate frame of the wheel chair which is (y-forward, x-right, z-up) and origin is on floor BETWEEN WHEELS
       #translation [0.5, 0.0, 0.5] # Example: this is saying the sensor mount is 0.5 meters to the right and 0.5 up from wheel chair origin 
-      translation: [0.34, 0.0, 0.7] # TODO UPDATE - wheelchair is 68 cm wide 
+      translation: [0.34, 0.0, 0.83] # TODO UPDATE - wheelchair is 68 cm wide 
       rotation:
         roll: 0.0
         pitch: -34.0 # TODO UPDATE - Note that this will not change turning manuever answers

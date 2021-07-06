@@ -130,6 +130,7 @@ def get_image_peaks(ico_chart, ga, level=2, with_o3d=False,
     t2 = time.perf_counter()
 
     gaussian_normals_sorted = np.asarray(ico_chart.sphere_mesh.vertices)
+    
     # Create Open3D structures for visualization
     if with_o3d:
         pcd_all_peaks = get_pc_all_peaks(peaks, clusters, gaussian_normals_sorted)

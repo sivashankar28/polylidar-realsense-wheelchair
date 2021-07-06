@@ -1,4 +1,6 @@
 import serial
+import struct
+import socket
 import logging
 import sys
 import argparse
@@ -19,7 +21,7 @@ import pandas as pd
 from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2Beta, IcoCharts
+from fastga import GaussianAccumulatorS2, IcoCharts
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -374,7 +376,7 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2(level=config['fastga']['level'])
     ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
 
     if video:
@@ -399,8 +401,7 @@ def capture(config, video=None):
                 continue
             t1 = time.perf_counter()
             counter += 1
-            if counter == 5:
-                import ipdb; ipdb.set_trace()
+            if counter < 1:
                 continue
 
             try:
@@ -428,9 +429,23 @@ def capture(config, video=None):
                         # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    # ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta)+ "\n").encode())
+                    
+                    # Send arduino curb height, distance to curb, and Angle to the curb
+                    # ser.write(("{:.2f}".format(curb_height)+"\n").encode())
                     # ser.write(("{:.2f}".format(dist)+"\n").encode())
                     # ser.write(("{:.2f}".format(theta)+"\n").encode())
+                    
+                    # Send RPi through Socket curb height, distance to curb, and Angle to the curb
+                    s=socket.socket()
+                    host="169.254.41.103"       #This is your Server IP!
+                    port=2345
+                    s.connect((host,port))
+                    data = struct.pack('!d', ("{:.2f}".format(curb_height)))
+                    s.send(data)
+                    rece=s.recv(1024)
+                    print("Received",rece)
+                    s.close()
+
                     # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
@@ -443,8 +458,8 @@ def capture(config, video=None):
                     # Stack both images horizontally
                     images = np.hstack((color_image_cv, depth_image_cv))
                     cv2.putText(images,'Curb Height: '"{:.2f}" 'm'.format(curb_height), (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    # cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
-                    # cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    cv2.putText(images,'Distance from Curb: '"{:.2f}" 'm'.format(dist), (10,215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+                    cv2.putText(images,'Angle to the Curb: '"{:.2f}" 'deg'.format(theta), (10,230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
                     cv2.imshow('RealSense Color/Depth (Aligned)', images)
                     
                     

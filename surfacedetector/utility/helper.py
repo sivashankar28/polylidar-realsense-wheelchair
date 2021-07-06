@@ -15,8 +15,7 @@ from descartes import PolygonPatch
 M2TOCM2 = 10000
 CMTOM = 0.01
 
-DS5_product_ids = ["0AD1", "0AD2", "0AD3", "0AD4", "0AD5", "0AF6",
-                   "0AFE", "0AFF", "0B00", "0B01", "0B03", "0B07", "0B3A"]
+DS5_product_ids = ["0AD1", "0AD2", "0AD3", "0AD4", "0AD5", "0AF6", "0AFE", "0AFF", "0B00", "0B01", "0B03", "0B07", "0B3A", "0B5C", "OB64"]
 ORANGE = [249, 115, 6]
 
 # rotate_points, align_vector_to_zaxis, get_downsampled_patch, calculate_plane_normal, filter_zero
@@ -199,7 +198,9 @@ def plot_points(points, proj_mat, color_image, config):
     #  Project coordinates to image space
     pix_coords = get_pix_coordinates(pts, proj_mat,config['color']['width'], config['color']['height'])
     pix_coords = pix_coords.reshape((-1, 1, 2))
-    cv2.polylines(color_image, [pix_coords], True, color= (255,0,0), thickness=2)
+    cv2.polylines(color_image, [pix_coords], True, color= (225,0,0), thickness=2)
+    # cv2.addWeighted(color_image, 0.4, color_image, 0.6, 0)
+    
 
 
 def plot_polygons(polygons, points, ax):
