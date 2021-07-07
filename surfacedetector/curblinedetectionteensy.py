@@ -434,7 +434,7 @@ def capture(config, video=None):
                     
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        top_plane = choose_plane(first_plane, second_plane)
+                        top_plane, _ = choose_plane(first_plane, second_plane)
                         top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
                         filtered_top_points = filter_points(top_points)  # <100 us
                         top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(filtered_top_points, top_normal, return_only_one_line=True, **config['linefitting'])

@@ -43,9 +43,9 @@ def choose_plane(first_plane, second_plane):
     proj_second = np.dot(second_centroid, first_normal)
 
     if proj_second < proj_first:
-        return second_plane
+        return second_plane, first_plane
     else:
-        return first_plane
+        return first_plane, second_plane
 
 
 def filter_points(top_points, max_z=0.5, max_dist=0.05, min_z=0.6):
