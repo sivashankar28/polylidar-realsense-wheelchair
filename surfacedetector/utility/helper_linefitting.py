@@ -75,6 +75,35 @@ def filter_points(top_points, max_z=0.5, max_dist=0.05, min_z=0.6):
     # need to roll it such that the jump starts on the first index
     return filtered_top_points
 
+def filter_points_from_wheel_chair(top_points, max_dist=0.05, min_dist_from_wc=0.06, max_dist_from_wc=1.7,
+                                    wheel_chair_position=[0,0,0]):
+    """Filters and simplifies 3D points belonging to a continuos line string.
+        Also filter points that are are less than min_z distance away
+
+    Args:
+        top_points (ndarray): 3D Line String
+        max_z (float, optional): Will filter out all points who z value is greater than min(points,z) + max_z. Defaults to 0.5.
+        max_dist (float, optional): Remove points closer than max_dist from eachother, cheap and fast simplification. Defaults to 0.05.
+
+    Returns:
+        [ndarray]: Filtered 3D line string
+    """
+    top_points_simplified = np.array(
+        simplify_radial_dist_3d(MatrixDouble(top_points), max_dist))
+    dist_from_wc = np.linalg.norm(top_points_simplified - wheel_chair_position, axis=1)
+    nearest_dist_from_wc = dist_from_wc.min()
+    far_dist = nearest_dist_from_wc + max_dist_from_wc
+    a1 = (dist_from_wc < far_dist) & (dist_from_wc > nearest_dist_from_wc)
+
+    np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
+    idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
+    great_idx = np.diff(idx_pairs, axis=1).argmax()
+    start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
+
+    filtered_top_points = top_points_simplified[start_idx:end_idx, :]
+    # need to roll it such that the jump starts on the first index
+    return filtered_top_points
+
 
 def get_rmse(x_points, y_points, fn):
     """Get Root Mean Squared Error

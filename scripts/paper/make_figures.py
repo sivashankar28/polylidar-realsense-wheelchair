@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 import logging
 import time
+import threading
 from scipy.spatial.transform import Rotation as R
 from joblib import load
 import numpy as np
@@ -12,9 +13,9 @@ import open3d as o3d
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d
+from scripts.paper.visgui import AppWindow
 
-
-from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points, choose_plane, rotate_data_planar
+from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, filter_points_from_wheel_chair, choose_plane, rotate_data_planar
 
 logging.basicConfig(level=logging.INFO)
 
@@ -27,44 +28,64 @@ def get_files():
     files = sorted([x for x in p if x.is_file()])
     return files
 
-
 def make_point_cloud(pts, color=cm.tab10.colors[0][:3]):
     cloud = o3d.geometry.PointCloud()
     cloud.points = o3d.utility.Vector3dVector(pts)
     cloud.paint_uniform_color(color)
     return cloud
 
-def visualize_3d(first_points_rot, second_points_rot=None, line_1=None,
-                first_points_label="Top Plane", second_points_label="Bottom Plane"):
+def get_camera_intrinsics_o3d(vfov=90, hfov=65, resolution=[480, 848]):
+    """
+    Get camera intrinsics
+    """ 
+    fx = resolution[0] / (2 * np.tan(hfov / 2))
+    fy = resolution[1] / (2 * np.tan(vfov / 2))
+    cx = resolution[0] / 2
+    cy = resolution[1] / 2
+    return o3d.camera.PinholeCameraIntrinsic(resolution[0], resolution[1], fx, fy, cx, cy)
 
-    app = gui.Application.instance
-    app.initialize()
+def visualize_3d(first_points_rot, second_points_rot=None, line_1=None,
+                first_points_label="Top Plane", second_points_label="Bottom Plane",
+                sensor_to_wheel_chair_transform=None,
+                color_image=None, depth_image=None):
+
+    gui.Application.instance.initialize()
+
+    win = AppWindow(1024, 768)
+
 
     first_points_o3d = make_point_cloud(first_points_rot)
     second_points_o3d = None if second_points_rot is None else make_point_cloud(second_points_rot, color=cm.tab10.colors[1][:3])
+
+    lit =  win.settings.material
     
-    vis = o3d.visualization.O3DVisualizer("Wheel Chair Curb Mounting Visualization", 1024, 768)
-    vis.show_settings = True
-    vis.show_axes = True
-    vis.show_ground = True
-    vis.add_geometry(first_points_label, first_points_o3d)
-    vis.add_geometry(second_points_label, second_points_o3d)
+    mat_line = o3d.visualization.rendering.Material()
+    mat_line.shader = "unlitLine"
+    mat_line.line_width = 5  # note that this is scaled with respect to pixels,
+    # vis = o3d.visualization.O3DVisualizer("Wheel Chair Curb Mounting Visualization", 1024, 768)
+    # win.ground_plane = o3d.visualization.rendering.Scene.GroundPlane.XY
+    # win.show_ground = True
+
+    win._scene.scene.show_axes(True)
+    win._scene.scene.add_geometry(first_points_label, first_points_o3d, lit)
+    win._scene.scene.add_geometry(second_points_label, second_points_o3d, lit)
 
 
-    # o3d.geometry.LineSet.create_camera_visualization()
+    if color_image is not None:
+        img_1 = o3d.geometry.Image(color_image[...,::-1].copy())
+        img_2 = o3d.geometry.Image(depth_image[...,::-1].copy())
+        win.rgb_widget.update_image(img_1)
+        win.depth_widget.update_image(img_2)
+    win._scene.scene.show_axes(True)
+    cf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
 
-    vis.reset_camera_to_default()
-    app.add_window(vis)
-    app.run()
-
-
-
-def plot_frustum(hfov=90, vfov=45):
-    """
-    Plot a frustum from the given horizontal and vertical field of views
-    """
-    
-
+    cam_transform = np.eye(4) if sensor_to_wheel_chair_transform is None else np.linalg.inv(sensor_to_wheel_chair_transform)
+    ls_camera = o3d.geometry.LineSet.create_camera_visualization(get_camera_intrinsics_o3d(), cam_transform, scale=0.1)
+    win._scene.scene.add_geometry("Camera", ls_camera, mat_line)
+    win._scene.scene.add_geometry(f"Wheel Chair Frame", cf, lit)
+    bounds = win._scene.scene.bounding_box
+    win._scene.setup_camera(60.0, bounds, bounds.get_center())
+    gui.Application.instance.run()
 
 
 def plot_fit_lines(ax, fit_lines, annotate=True):
@@ -79,8 +100,6 @@ def plot_fit_lines(ax, fit_lines, annotate=True):
         mean = fit_line['points'].mean(axis=0)
         if annotate:
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
-
-
 
 def transform_points(points, transform):
     """
@@ -106,31 +125,40 @@ def process(data):
     """ Process the bottom and top planes dictionary """
 
     sensor_to_wheel_chair_transform = data['sensor_to_wheel_chair_transform']
+    color_image= data['color_image']
+    depth_image = data['depth_image']
     
     top_plane, bottom_plane = choose_plane(data['first_plane'], data['second_plane'])
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
     bottom_points = bottom_plane['all_points']
 
+    top_points = transform_points(top_points, sensor_to_wheel_chair_transform)
+    bottom_points = transform_points(bottom_points, sensor_to_wheel_chair_transform)
+
+    print("Polygons Before Filtering")
+    visualize_3d(top_points, bottom_points, 
+                sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
+                color_image=color_image, depth_image=depth_image)
+
     t1 = time.perf_counter()
-    filtered_top_points = filter_points(top_points)  # <100 us
-    filtered_bottom_points = filter_points(bottom_points)  # <100 us
+    filtered_top_points = filter_points_from_wheel_chair(top_points)  # <100 us
+    filtered_bottom_points = filter_points_from_wheel_chair(bottom_points)  # <100 us
     t2 = time.perf_counter()
-
-    filtered_top_points = transform_points(filtered_top_points, sensor_to_wheel_chair_transform)
-    filtered_bottom_points = transform_points(filtered_bottom_points, sensor_to_wheel_chair_transform)
-
-    visualize_3d(filtered_top_points, filtered_bottom_points)
+    print("Polygons After Filtering")
+    visualize_3d(filtered_top_points, filtered_bottom_points, 
+                sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
+                color_image=color_image, depth_image=depth_image)
     # visualize_3d(rotate_data_planar(top_points, -1 * top_normal), rotate_data_planar(bottom_plane['all_points'], -1 * top_normal))
     top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
         filtered_top_points, top_normal)  # ~2ms
-    visualize_2d(rotate_data_planar(top_points, top_normal)[:, :2], top_points_2d, all_fit_lines, best_fit_lines)
+    visualize_2d(filtered_top_points, top_points_2d, all_fit_lines, best_fit_lines)
     t3 = time.perf_counter()
     ms1 = (t2-t1) * 1000
     ms2 = (t3-t2) * 1000
     ms = ms1 + ms2
     logging.debug(
         "Process Points - Filter and Simplify: %.2f, Extract Lines: %.2f", ms1, ms2)
-    visualize_3d(top_points, second_points_rot=best_fit_lines[0]['square_points'], line_1=best_fit_lines[0]['points_3d'])
+    # visualize_3d(top_points, second_points_rot=best_fit_lines[0]['square_points'], line_1=best_fit_lines[0]['points_3d'])
     return ms
 
 
