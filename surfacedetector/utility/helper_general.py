@@ -35,6 +35,8 @@ def _set_axes_radius(ax, origin, radius):
 
 
 def rotate_data_planar(points, normal, inverse=False):
+    if normal is None or np.array_equal(normal, [0.0, 0.0, 1.0]):
+        return points
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         rm, _ = R.align_vectors([[0, 0, 1]], [normal])  # Rotating matrix the polygon

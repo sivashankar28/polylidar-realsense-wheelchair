@@ -21,15 +21,19 @@ Process:
 """
 import time
 import math
+import sys
 import logging
 from itertools import combinations
 
 import numpy as np
+from numpy.lib.polynomial import poly
 from scipy.ndimage.filters import uniform_filter1d
 from scipy.spatial.transform import Rotation as R
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
 import matplotlib.pyplot as plt
+from pprint import pprint
+from scipy.cluster.hierarchy import linkage, fcluster
 
 from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points
 
@@ -226,7 +230,7 @@ def extract_lines(pc, window_size=3, dot_min=0.95, **kwargs):
     return fit_lines
 
 
-def orthogonal_distance(line_point, line_vec, points):
+def orthogonal_distance(line_point, line_vec, points, return_median=True):
     """Computes Orthogonal distance between a line and points
 
     Args:
@@ -245,9 +249,10 @@ def orthogonal_distance(line_point, line_vec, points):
         line_vec_array, line_proj.reshape(line_proj.shape[0], 1))
     perf_offset = line_offset - line_proj
     _, lengths = normalized(perf_offset)
-    median = np.median(lengths)
-
-    return median
+    if return_median:
+        return np.median(lengths)
+    else:
+        return lengths
 
 
 def check_merge_line(points, line, line_next, i, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05, **kwargs):
@@ -335,6 +340,7 @@ def sort_lines(best_fit_lines, w1=0.75, w2=0.25, wheel_chair_direction_vec_senso
         if dist_to_line < too_close:
             sort_metric -= 1
         line['sort_metric'] = sort_metric
+    # pprint(best_fit_lines)
     return sorted(best_fit_lines, key=lambda i: i['sort_metric'], reverse=True)
 
 
@@ -462,8 +468,10 @@ def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
 
 def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
     t1 = time.perf_counter()
+
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
+
     height = np.mean(top_points_3d[:, 2])
     t2 = time.perf_counter()
     all_fit_lines = extract_lines(top_points_2d, **kwargs)
@@ -480,9 +488,231 @@ def extract_lines_wrapper(top_points, top_normal, min_points_line=12, **kwargs):
     best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
     best_fit_lines = filter_lines(best_fit_lines, **kwargs)
 
-
-
     return top_points_2d, height, all_fit_lines, best_fit_lines
+
+def get_point_clusters(points, clusters):
+    """Cluster points (R3) together given a cluster grouping"""
+    point_clusters = []
+    cluster_groups = np.unique(clusters)
+    for cluster in cluster_groups:
+        temp_mask = clusters == cluster
+        point_clusters.append(points[temp_mask, :])
+        # point_clusters.append((points[temp_mask, :], point_weights[temp_mask]))
+    return point_clusters
+
+
+def average_clusters(points, clusters, min_num_models=3):
+    """Average any clusters together by weights, remove any that don't meet a minimum requirements"""
+    cluster_points = get_point_clusters(points, clusters)
+    clusters_averaged = []
+    for points in cluster_points:
+        if points.shape[0] >= min_num_models:
+            avg_point = np.average(points, axis=0)
+            clusters_averaged.append(avg_point)
+    clusters_filtered = np.array(clusters_averaged)
+    return clusters_filtered
+
+
+def cluster_lines(points, cluster_kwargs=dict(t=0.15, criterion='distance')):
+    Z = linkage(points, 'single')
+    clusters = fcluster(Z, **cluster_kwargs)
+
+
+
+    return clusters
+
+
+def create_line_model(line_point, line_vec, points, max_slope=2.0):
+    flip_axis = False
+    x_points = points[:, 0]
+    y_points = points[:, 1]
+    m = line_vec[1] / line_vec[0]
+    b = line_point[1] - m * line_point[0]
+    if m > max_slope:
+        flip_axis = True
+        x_points = y_points
+        y_points = points[:, 0]
+        m = line_vec[0] / line_vec[0]
+        b = line_point[0] - m * line_point[1]
+    coef = [m, b]
+
+    poly1d_fn = np.poly1d(coef)
+    
+    res = dict(points=points, x_points=x_points, y_points=y_points, fn=poly1d_fn,
+            dir_vec=line_vec, line_point=line_point, flip_axis=flip_axis, points_2d_orig=points)
+
+    return res
+
+def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.25):
+    filtered_line_models = []
+    for line in lines:
+        line_point = line['line_point']
+        line_vec = line['dir_vec']
+        all_points = line['points']
+
+        total_points = all_points.shape[0]
+        ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
+        mask = ortho_dist < max_ortho_offset
+        points_ = all_points[mask, :]
+
+        ortho_dist**2
+
+        # print(f"For LP: {line_point}; line_vec: {line_vec}")
+        # pprint(ortho_dist)
+        num_inliers = points_.shape[0]
+        inlier_ratio = float(num_inliers)/float(total_points)
+        if inlier_ratio < min_inlier_ratio:
+            continue
+        
+        x_points = points_[:, 0]
+        y_points = points_[:, 1]
+
+        if line['flip_axis']:
+            y_points = x_points
+            x_points = points_[:, 1]
+
+        coef = np.polyfit(x_points, y_points, 1)
+        poly1d_fn = np.poly1d(coef)
+
+        line['fn'] = poly1d_fn
+        line['x_points'] = x_points
+        line['y_points'] = y_points
+        line['points'] = points_
+        line['rmse'] = np.mean(ortho_dist[mask])
+
+
+        filtered_line_models.append(line)
+    return filtered_line_models
+
+
+def extract_lines_parameterized(pc, idx_skip=1, window_size=6, dot_min=0.95, **kwargs):
+    """Extract parameterization of possible lines in a point set
+    """
+    np.set_printoptions(precision=2, suppress=True)
+    t1 = time.perf_counter()
+    pc_skip = pc[::idx_skip, :] # skip point to reduce noise
+
+    pc_shift = np.roll(pc_skip, -1, axis=0) # shift point cloud idx to right
+    diff = pc_shift - pc_skip # create vector diff between consecutive points
+    diff_vec, length = normalized(diff) 
+    idx_max = np.argmax(length)
+    assert idx_max != 0 or idx_max != length.shape[0] - \
+        1, "LineString is not continuously connected"
+
+    # Smooth vector estimate of line
+    skip_window_edge = int(np.ceil(window_size / 2.0)) # must remove points at edge of smoothed window, will give erroneous result if kept
+    t2 = time.perf_counter()
+    x = uniform_filter1d(diff[:, 0], size=window_size)
+    y = uniform_filter1d(diff[:, 1], size=window_size)
+    diff_smooth = np.column_stack((x, y))
+    diff_smooth_filt = diff_smooth[skip_window_edge:-skip_window_edge]
+    t3 = time.perf_counter()
+
+    # MidPoint of estimated line
+    mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge:-skip_window_edge, :]
+    # Unit vector of angle estimate of line direction
+    line_vec_norm, _ = normalized(diff_smooth_filt)
+    # convert to original unit vector of line angle. Basically this unit vector of a line starting from origin that orthogonally intersects with the line estimate
+    # this is done as a 90 degree rotation of the line vector
+    rot = np.array([[np.cos(np.pi/2), -np.sin(np.pi/2.0)], [np.sin(np.pi/2.0), np.cos(np.pi/2.0)]])
+    ang_vec_norm = np.matmul(line_vec_norm, rot.transpose())
+
+    # Now we need to get orthogonal offset of this line from origin
+    numer = np.einsum('ij,ij->i', diff_smooth_filt, mid_point)
+    denom = -np.linalg.norm((diff_smooth_filt * diff_smooth_filt), axis=1)
+    t = numer/denom
+    intersection_point = t[:, np.newaxis] * diff_smooth_filt + mid_point
+    origin_offset = np.linalg.norm(intersection_point, axis=1)
+    t4 = time.perf_counter()
+    # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
+    condensed_param_set = ang_vec_norm * origin_offset[:, np.newaxis]
+
+    # cluster similar lines by point distance
+    clusters = cluster_lines(condensed_param_set)
+    cluster_average = average_clusters(condensed_param_set, clusters)
+    t5 = time.perf_counter()
+    pprint(cluster_average)
+
+    # Decompose the angle and the origin offset
+    ang_vec_norm_cluster, origin_offset_cluster = normalized(cluster_average)
+    # recover the line vector, reverse 90 degree rotation
+    line_vec_norm = np.matmul(ang_vec_norm_cluster, rot)
+
+    line_models = [create_line_model(cluster_average[i,:], line_vec_norm[i, :], pc) for i in range(cluster_average.shape[0])]
+    line_models = evaluate_and_filter_models(line_models)
+
+
+    # convert point vec form to mx + b form
+
+    # poly1d_fn = np.poly1d(coef)
+
+    # Angle Offset Parameter Space
+    # This if just for plotting, same info but in radians instead of (x,y) pont of circle
+    deg_ang = np.degrees(np.arctan2(diff_smooth_filt[:, 1], diff_smooth_filt[:, 0]))
+    deg_ang = deg_ang + 90
+    parameter_set = np.column_stack((deg_ang, origin_offset))
+
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
+    ax[0,0].scatter(pc[:, 0], pc[:, 1])
+    ax[0,0].set_xlabel("X")
+    ax[0,0].set_ylabel("Y")
+
+    ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
+    ax[0,1].set_xlabel("Angles (deg)")
+    ax[0,1].set_ylabel("Distance (m)")
+
+    ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=clusters, cmap='tab10')
+    t = np.linspace(0,np.pi*2,100)
+    ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
+    ax[1,0].set_xlabel("X")
+    ax[1,0].set_ylabel("Y")
+    ax[1,0].axis("equal")
+
+    ax[1,1].scatter(pc[:, 0], pc[:, 1])
+    plot_fit_lines(ax[1,1], line_models)
+    ax[1,1].set_xlabel("X")
+    ax[1,1].set_ylabel("Y")
+    
+    plt.show()
+    # pprint(new_point)
+    # pprint(new_dist)
+    # v1 * (p0 + t*v1) = 0
+
+    # -(v1 * po)/ v1* v1 = t 
+
+    # diff_smooth, length = normalized(diff_smooth)
+    # diff_smooth_shift = np.roll(diff_smooth, -1, axis=0)
+    # acos = np.einsum('ij, ij->i', diff_smooth, diff_smooth_shift)
+    # t4 = time.perf_counter()
+
+    # mask = acos > dot_min
+    # np_diff = np.diff(np.hstack(([False], mask, [False])))
+    # idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
+
+    # t5 = time.perf_counter()
+    # logging.debug("IDX Pairs %s", (idx_pairs))
+    # fit_lines = [fit_line(pc, idx) for idx in idx_pairs if idx[1] - idx[0] > 1]
+    # t6 = time.perf_counter()
+
+    ms1 = (t2-t1) * 1000
+    ms2 = (t3-t2) * 1000
+    ms3 = (t4-t3) * 1000
+    ms4 = (t5-t4) * 1000
+    # ms5 = (t6-t5) * 1000
+    print(ms1, ms2, ms3, ms4)
+
+def extract_lines_wrapper_new(top_points, top_normal, min_points_line=12, **kwargs):
+    t1 = time.perf_counter()
+    top_points_3d = rotate_data_planar(top_points, top_normal)
+    top_points_2d = top_points_3d[:, :2]
+    height = np.mean(top_points_3d[:, 2])
+    t2 = time.perf_counter()
+    all_fit_lines = extract_lines_parameterized(top_points_2d, **kwargs)
+    t3 = time.perf_counter()
+    # sys.exit(0)
+
+
+
 
 def create_transform(translate, rotation):
     transform = np.eye(4)
