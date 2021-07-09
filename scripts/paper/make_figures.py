@@ -16,7 +16,7 @@ import open3d.visualization.rendering as rendering
 from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d
 from scripts.paper.visgui import AppWindow
 
-from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever
+from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever, transform_points
 
 logging.basicConfig(level=logging.INFO)
 
@@ -135,14 +135,6 @@ def plot_fit_lines(ax, fit_lines, annotate=True):
         mean = fit_line['points'].mean(axis=0)
         if annotate:
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
-
-def transform_points(points, transform):
-    """
-    Transform points using a given 4x4 transformation matrix
-    """
-    points_ = np.hstack((points, np.ones((points.shape[0], 1))))
-    points_transformed = np.matmul(points_, transform.transpose())[:, :3]
-    return points_transformed
 
 def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
     # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(

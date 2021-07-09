@@ -783,7 +783,7 @@ def transform_points(points, transform):
     Transform points using a given 4x4 transformation matrix
     """
     points_ = np.hstack((points, np.ones((points.shape[0], 1))))
-    points_transformed = np.matmul(points_, transform.transpose())[:, :3]
+    points_transformed = np.ascontiguousarray(np.matmul(points_, transform.transpose())[:, :3])
     return points_transformed
 
 def get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, sensor_to_wheel_chair_transform, **kwargs):
