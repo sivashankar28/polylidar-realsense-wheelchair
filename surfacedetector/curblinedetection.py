@@ -431,12 +431,12 @@ def capture(config, video=None):
                     curb_height, first_plane, second_plane = analyze_planes_updated(geometric_planes)
                     fname = Path(config['playback']['file']).stem
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
-                    dump(dict(first_plane=first_plane, second_plane=second_plane, 
-                            color_image=color_image_cv, depth_image=depth_image_cv, 
-                            planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
-                            sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
-                            f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
-                    input("Press Enter to move to next frame...")
+                    # dump(dict(first_plane=first_plane, second_plane=second_plane, 
+                    #         color_image=color_image_cv, depth_image=depth_image_cv, 
+                    #         planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
+                    #         sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
+                    #         f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
+                    # input("Press Enter to move to next frame...")
                 
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
@@ -447,14 +447,14 @@ def capture(config, video=None):
                         top_normal = np.array([0.0, 0.0, 1.0]) # hard code, this will work if frames are setup correctly in config file
                         filtered_top_points = filter_points_from_wheel_chair(top_points)  # <100 us
                         best_fit_lines = extract_lines_wrapper_new(filtered_top_points, top_normal, 
-                                        return_only_one_line=True, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], **config['linefitting'])
+                                        return_only_one_line=True, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], **config['linefitting']) #< 1.6ms
                         if best_fit_lines:
                             #If there are two lines only choose the first one
                             platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
                             platform_normal_wheel_chair_frame = best_fit_lines[0]['hplane_normal']
                             result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, 
                                                               poi_offset=config.get('poi_offset', 0.7), debug=False)
-                            plt.show()
+                            # plt.show()
 
                             orthog_dist = result['ortho_dist_platform']
                             distance_of_interest = result['dist_poi']
