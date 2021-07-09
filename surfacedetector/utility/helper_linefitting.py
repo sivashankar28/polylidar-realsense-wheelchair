@@ -27,6 +27,7 @@ from itertools import combinations
 
 import numpy as np
 from numpy.lib.polynomial import poly
+from scipy import cluster
 from scipy.ndimage.filters import uniform_filter1d
 from scipy.spatial.transform import Rotation as R
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
@@ -442,13 +443,14 @@ def recover_3d_lines(best_fit_lines, top_normal, height,
         line['dir_vec_3d'] = line['dir_vec_3d'] / \
             np.linalg.norm(line['dir_vec_3d'])
         line['plane_normal'] = top_normal
+        multiply = 1.0 if np.array_equal(top_normal, [0.0, 0.0, 1.0]) else -1.0
         line['hplane_normal'] = np.cross(
-            line['dir_vec_3d'], line['plane_normal']) * -1
+            line['dir_vec_3d'], line['plane_normal']) * multiply
         line['hplane_normal'] = line['hplane_normal'] / \
             np.linalg.norm(line['hplane_normal'])
         line['hplane_point'] = line['points_3d'].mean(axis=0)
         line['square_points'] = make_square(
-            line['hplane_point'], line['plane_normal'], line['dir_vec_3d'], line['hplane_normal'])
+            line['hplane_point'], line['plane_normal'] * -multiply, line['dir_vec_3d'], line['hplane_normal'])
         line['dist_to_line'] = np.linalg.norm(line['hplane_point'] - wheel_chair_origin_sensor_frame)
 
     return best_fit_lines
@@ -505,20 +507,20 @@ def average_clusters(points, clusters, min_num_models=3):
     """Average any clusters together by weights, remove any that don't meet a minimum requirements"""
     cluster_points = get_point_clusters(points, clusters)
     clusters_averaged = []
-    for points in cluster_points:
+    cluster_idx = []
+    for clust_idx, points in enumerate(cluster_points):
         if points.shape[0] >= min_num_models:
             avg_point = np.average(points, axis=0)
             clusters_averaged.append(avg_point)
+            cluster_idx.append(clust_idx)
+
     clusters_filtered = np.array(clusters_averaged)
-    return clusters_filtered
+    return clusters_filtered, cluster_idx
 
 
 def cluster_lines(points, cluster_kwargs=dict(t=0.15, criterion='distance')):
     Z = linkage(points, 'single')
     clusters = fcluster(Z, **cluster_kwargs)
-
-
-
     return clusters
 
 
@@ -573,25 +575,35 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
 
         coef = np.polyfit(x_points, y_points, 1)
         poly1d_fn = np.poly1d(coef)
+        
+        inlier_abs_dev = ortho_dist[mask]
 
         line['fn'] = poly1d_fn
         line['x_points'] = x_points
         line['y_points'] = y_points
         line['points'] = points_
-        line['rmse'] = np.mean(ortho_dist[mask])
-
+        line['rmse'] = np.sqrt(np.sum((inlier_abs_dev **2)) / inlier_abs_dev.shape[0])
 
         filtered_line_models.append(line)
     return filtered_line_models
 
 
-def extract_lines_parameterized(pc, idx_skip=1, window_size=6, dot_min=0.95, **kwargs):
-    """Extract parameterization of possible lines in a point set
+def extract_lines_parameterized(pc, idx_skip=1, window_size=6, 
+                                cluster_kwargs=dict(t=0.15, criterion='distance'),
+                                min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.25, 
+                                debug=False, **kwargs):
+    """Extract possible lines within line segment point cloud
+    0. Dowsample point cloud segment by skipping over points with by index (idx_skip)
+    1. Create vectors for each line segment. These vectors are simple proposed line models!
+    2. Smooth these vectors using a uniform filter (window_size)
+    3. Represent these line models (smoothed vectors) in a parameter space (angle and origin offset) as 2D points.
+    4. Cluster these points (which are line models!) using agglomerative clustering to find best "average" line models. 
+    5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     """
     np.set_printoptions(precision=2, suppress=True)
     t1 = time.perf_counter()
     pc_skip = pc[::idx_skip, :] # skip point to reduce noise
-
+    # 1. Create vectors for each line segment
     pc_shift = np.roll(pc_skip, -1, axis=0) # shift point cloud idx to right
     diff = pc_shift - pc_skip # create vector diff between consecutive points
     diff_vec, length = normalized(diff) 
@@ -599,7 +611,7 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6, dot_min=0.95, **k
     assert idx_max != 0 or idx_max != length.shape[0] - \
         1, "LineString is not continuously connected"
 
-    # Smooth vector estimate of line
+    # 2. Smooth vector estimate of line
     skip_window_edge = int(np.ceil(window_size / 2.0)) # must remove points at edge of smoothed window, will give erroneous result if kept
     t2 = time.perf_counter()
     x = uniform_filter1d(diff[:, 0], size=window_size)
@@ -608,6 +620,9 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6, dot_min=0.95, **k
     diff_smooth_filt = diff_smooth[skip_window_edge:-skip_window_edge]
     t3 = time.perf_counter()
 
+    # 3. Represent these line models (smoothed vectors) in a parameter space, angle and origin offset
+    #    Neat Trick - Convert angle to postion on unit sphere (normalized) and then scale with origin offset
+    #    Now we have a single 2D point in Euclidean space that represents the line angle and origin offset. Points close together mean similar lines!
     # MidPoint of estimated line
     mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge:-skip_window_edge, :]
     # Unit vector of angle estimate of line direction
@@ -627,89 +642,75 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6, dot_min=0.95, **k
     # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
     condensed_param_set = ang_vec_norm * origin_offset[:, np.newaxis]
 
+    # 4. Cluster these points (which are line models!) using agglomerative clustering to find best "average" line models. 
+    #    Only allow clusters with > min_num_models. Average models in a cluster to get final line model for that specific cluster.
     # cluster similar lines by point distance
-    clusters = cluster_lines(condensed_param_set)
-    cluster_average = average_clusters(condensed_param_set, clusters)
+    clusters = cluster_lines(condensed_param_set, cluster_kwargs=cluster_kwargs)
+    cluster_average, cluster_idx = average_clusters(condensed_param_set, clusters, min_num_models=min_num_models)
     t5 = time.perf_counter()
-    pprint(cluster_average)
 
     # Decompose the angle and the origin offset
-    ang_vec_norm_cluster, origin_offset_cluster = normalized(cluster_average)
+    ang_vec_norm_cluster, _ = normalized(cluster_average)
     # recover the line vector, reverse 90 degree rotation
     line_vec_norm = np.matmul(ang_vec_norm_cluster, rot)
 
+    # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     line_models = [create_line_model(cluster_average[i,:], line_vec_norm[i, :], pc) for i in range(cluster_average.shape[0])]
-    line_models = evaluate_and_filter_models(line_models)
+    line_models = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
+
+    if debug:
+        # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
+        # This if just for plotting, same info but in radians instead of (x,y) pont of circle
+        deg_ang = np.degrees(np.arctan2(diff_smooth_filt[:, 1], diff_smooth_filt[:, 0]))
+        deg_ang = deg_ang + 90
+        parameter_set = np.column_stack((deg_ang, origin_offset))
+
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
+        ax[0,0].scatter(pc[:, 0], pc[:, 1])
+        ax[0,0].set_xlabel("X")
+        ax[0,0].set_ylabel("Y")
+
+        ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
+        ax[0,1].set_xlabel("Angles (deg)")
+        ax[0,1].set_ylabel("Distance (m)")
 
 
-    # convert point vec form to mx + b form
+        tab10_colors = np.array(plt.cm.get_cmap('tab10').colors)
+        ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters])
+        t = np.linspace(0,np.pi*2,100)
+        ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
+        ax[1,0].set_xlabel("X")
+        ax[1,0].set_ylabel("Y")
+        ax[1,0].axis("equal")
 
-    # poly1d_fn = np.poly1d(coef)
+        # colors = [tab10_colors[i+1] for i in cluster_idx]
+        ax[1,1].scatter(pc[:, 0], pc[:, 1])
+        plot_fit_lines(ax[1,1], line_models, colors=tab10_colors[np.array(cluster_idx) +1])
+        ax[1,1].set_xlabel("X")
+        ax[1,1].set_ylabel("Y")
+        
+        plt.show()
 
-    # Angle Offset Parameter Space
-    # This if just for plotting, same info but in radians instead of (x,y) pont of circle
-    deg_ang = np.degrees(np.arctan2(diff_smooth_filt[:, 1], diff_smooth_filt[:, 0]))
-    deg_ang = deg_ang + 90
-    parameter_set = np.column_stack((deg_ang, origin_offset))
+        ms1 = (t2-t1) * 1000
+        ms2 = (t3-t2) * 1000
+        ms3 = (t4-t3) * 1000
+        ms4 = (t5-t4) * 1000
+        # ms5 = (t6-t5) * 1000
+        # print(ms1, ms2, ms3, ms4)
 
-    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
-    ax[0,0].scatter(pc[:, 0], pc[:, 1])
-    ax[0,0].set_xlabel("X")
-    ax[0,0].set_ylabel("Y")
+    return line_models
 
-    ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
-    ax[0,1].set_xlabel("Angles (deg)")
-    ax[0,1].set_ylabel("Distance (m)")
-
-    ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=clusters, cmap='tab10')
-    t = np.linspace(0,np.pi*2,100)
-    ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
-    ax[1,0].set_xlabel("X")
-    ax[1,0].set_ylabel("Y")
-    ax[1,0].axis("equal")
-
-    ax[1,1].scatter(pc[:, 0], pc[:, 1])
-    plot_fit_lines(ax[1,1], line_models)
-    ax[1,1].set_xlabel("X")
-    ax[1,1].set_ylabel("Y")
-    
-    plt.show()
-    # pprint(new_point)
-    # pprint(new_dist)
-    # v1 * (p0 + t*v1) = 0
-
-    # -(v1 * po)/ v1* v1 = t 
-
-    # diff_smooth, length = normalized(diff_smooth)
-    # diff_smooth_shift = np.roll(diff_smooth, -1, axis=0)
-    # acos = np.einsum('ij, ij->i', diff_smooth, diff_smooth_shift)
-    # t4 = time.perf_counter()
-
-    # mask = acos > dot_min
-    # np_diff = np.diff(np.hstack(([False], mask, [False])))
-    # idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
-
-    # t5 = time.perf_counter()
-    # logging.debug("IDX Pairs %s", (idx_pairs))
-    # fit_lines = [fit_line(pc, idx) for idx in idx_pairs if idx[1] - idx[0] > 1]
-    # t6 = time.perf_counter()
-
-    ms1 = (t2-t1) * 1000
-    ms2 = (t3-t2) * 1000
-    ms3 = (t4-t3) * 1000
-    ms4 = (t5-t4) * 1000
-    # ms5 = (t6-t5) * 1000
-    print(ms1, ms2, ms3, ms4)
-
-def extract_lines_wrapper_new(top_points, top_normal, min_points_line=12, **kwargs):
+def extract_lines_wrapper_new(top_points, top_normal, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
     height = np.mean(top_points_3d[:, 2])
     t2 = time.perf_counter()
-    all_fit_lines = extract_lines_parameterized(top_points_2d, **kwargs)
+    best_fit_lines = extract_lines_parameterized(top_points_2d, **kwargs)
     t3 = time.perf_counter()
-    # sys.exit(0)
+    best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
+    best_fit_lines = filter_lines(best_fit_lines, **kwargs)
+    return best_fit_lines
 
 
 

@@ -23,9 +23,9 @@ logging.basicConfig(level=logging.INFO)
 DATA_DIR = Path('./data/scratch_test')
 
 
-def make_line(points, lines=None, color=[0, 1, 0]):
+def make_line(points, lines=None, color=[0, 1, 0], add_endpoints=False):
     points = np.array(points)
-    lines = np.array(lines) if lines is not None else lines_from_ordered_points(points)
+    lines = np.array(lines) if lines is not None else lines_from_ordered_points(points, add_endpoints=add_endpoints)
     colors = np.array(color)
     ls = o3d.geometry.LineSet()
     ls.points = o3d.utility.Vector3dVector(points)
@@ -33,8 +33,10 @@ def make_line(points, lines=None, color=[0, 1, 0]):
     ls.paint_uniform_color(colors)
     return ls
 
-def lines_from_ordered_points(points):
+def lines_from_ordered_points(points, add_endpoints=False):
     lines = [[i, i + 1] for i in range(0, points.shape[0] - 1, 1)]
+    if add_endpoints:
+        lines.append([points.shape[0] - 1, 0])
     return np.array(lines)
 
 def get_files():
@@ -58,7 +60,7 @@ def get_camera_intrinsics_o3d(vfov=90, hfov=65, resolution=[480, 848]):
     cy = resolution[1] / 2
     return o3d.camera.PinholeCameraIntrinsic(resolution[0], resolution[1], fx, fy, cx, cy)
 
-def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None, line_1=None,
+def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None, fit_line=None,
                 first_points_label="Top Plane", second_points_label="Bottom Plane", filtered_points_label="Filtered Points",
                 sensor_to_wheel_chair_transform=None,
                 color_image=None, depth_image=None):
@@ -76,7 +78,15 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
     
     mat_line = o3d.visualization.rendering.Material()
     mat_line.shader = "unlitLine"
-    mat_line.line_width = 5  # note that this is scaled with respect to pixels,
+    mat_line.line_width = 5  # note that this is scaled with respect to pixels
+
+    win.mat_line = mat_line
+
+    if fit_line:
+        square_point_set = fit_line['square_points']
+        square_line = make_line(square_point_set, color=[1,0,0], add_endpoints=True)
+        win._scene.scene.add_geometry("Platform", square_line, mat_line)
+
     # vis = o3d.visualization.O3DVisualizer("Wheel Chair Curb Mounting Visualization", 1024, 768)
     # win.ground_plane = o3d.visualization.rendering.Scene.GroundPlane.XY
     # win.show_ground = True
@@ -170,12 +180,13 @@ def process(data):
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
                 color_image=color_image, depth_image=depth_image)
 
-    extract_lines_wrapper_new(
-        filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0])  # ~2ms
-    top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
-        filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0])  # ~2ms
+    best_fit_lines = extract_lines_wrapper_new(
+        filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], debug=True)  # ~2ms
 
-    visualize_2d(filtered_top_points, top_points_2d, all_fit_lines, best_fit_lines)
+    visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0],
+                sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
+                color_image=color_image, depth_image=depth_image)
+
     t3 = time.perf_counter()
     ms1 = (t2-t1) * 1000
     ms2 = (t3-t2) * 1000

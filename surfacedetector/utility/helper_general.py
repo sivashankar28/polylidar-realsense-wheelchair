@@ -72,15 +72,19 @@ def setup_figure_2d():
         ax_.axis('equal')
     return fig, ax
 
-def plot_fit_lines(ax, fit_lines, annotate=True):
+def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
     next(ax._get_lines.prop_cycler)
-    for fit_line in fit_lines:
+    for i, fit_line in enumerate(fit_lines):
         poly1d_fn = fit_line['fn']
+        if colors is None:
+            color = next(ax._get_lines.prop_cycler)['color']
+        else:
+            color = colors[i]
         if fit_line['flip_axis']:
-            ax.plot(poly1d_fn(fit_line['x_points']), fit_line['x_points'], '-')
+            ax.plot(poly1d_fn(fit_line['x_points']), fit_line['x_points'], '-',  c=color)
         else:
             points = fit_line['points']
-            ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-')
+            ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-', c=color)
         mean = fit_line['points'].mean(axis=0)
         if annotate:
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
