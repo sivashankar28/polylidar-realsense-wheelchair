@@ -533,7 +533,7 @@ def average_clusters(points, clusters, min_num_models=3):
     return clusters_filtered, cluster_idx
 
 
-def cluster_lines(points, cluster_kwargs=dict(t=0.15, criterion='distance')):
+def cluster_lines(points, cluster_kwargs=dict(t=0.10, criterion='distance')):
     Z = linkage(points, 'single')
     clusters = fcluster(Z, **cluster_kwargs)
     return clusters
@@ -604,9 +604,9 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
     return filtered_line_models
 
 
-def extract_lines_parameterized(pc, idx_skip=1, window_size=6, 
+def extract_lines_parameterized(pc, idx_skip=2, window_size=4, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
-                                min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.15, 
+                                min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.20, 
                                 debug=False, **kwargs):
     """Extract possible lines within line segment point cloud
     0. Dowsample point cloud segment by skipping over points with by index (idx_skip)
@@ -633,18 +633,19 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
     x = uniform_filter1d(diff[:, 0], size=window_size)
     y = uniform_filter1d(diff[:, 1], size=window_size)
     diff_smooth = np.column_stack((x, y))
-    diff_smooth_filt = diff_smooth[skip_window_edge:-skip_window_edge]
+    diff_smooth_filt = diff_smooth[skip_window_edge-1:-skip_window_edge]
     t3 = time.perf_counter()
 
     # 3. Represent these line models (smoothed vectors) in a parameter space, angle and origin offset
     #    Neat Trick - Convert angle to postion on unit sphere (normalized) and then scale with origin offset
     #    Now we have a single 2D point in Euclidean space that represents the line angle and origin offset. Points close together mean similar lines!
     # MidPoint of estimated line
-    mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge:-skip_window_edge, :]
+    mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge-1:-skip_window_edge, :]
     # Unit vector of angle estimate of line direction
     line_vec_norm, _ = normalized(diff_smooth_filt)
+    line_vec_norm_orig = np.copy(line_vec_norm)
     mask = line_vec_norm[:, 0] < 0
-    line_vec_norm[mask] = -1 * line_vec_norm[mask, :] # change directionality of line_vec_norm if angle is negative value (always point +x)
+    line_vec_norm[mask, :] = -1 * line_vec_norm[mask, :] # change directionality of line_vec_norm if angle is negative value (always point +x)
     # convert to original unit vector of line angle. Basically this unit vector of a line starting from origin that orthogonally intersects with the line estimate
     # this is done as a 90 degree rotation of the line vector
     rot = np.array([[np.cos(np.pi/2), -np.sin(np.pi/2.0)], [np.sin(np.pi/2.0), np.cos(np.pi/2.0)]])
@@ -678,43 +679,53 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
     # Decompose the angle and the origin offset
     ang_vec_norm_cluster, _ = normalized(cluster_average)
     # recover the line vector, reverse 90 degree rotation
-    line_vec_norm = np.matmul(ang_vec_norm_cluster, rot)
+    line_vec_norm_cluster = np.matmul(ang_vec_norm_cluster, rot)
 
     # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
-    line_models = [create_line_model(cluster_average[i,:], line_vec_norm[i, :], pc) for i in range(cluster_average.shape[0])]
+    line_models = [create_line_model(cluster_average[i,:], line_vec_norm_cluster[i, :], pc) for i in range(cluster_average.shape[0])]
     line_models_filtered = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
 
     if debug:
         # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
         # This if just for plotting, same info but in radians instead of (x,y) pont of circle
-        deg_ang = np.degrees(np.arctan2(diff_smooth_filt[:, 1], diff_smooth_filt[:, 0]))
-        deg_ang = deg_ang + 90
+        deg_ang = np.degrees(np.arctan2(ang_vec_norm[:, 1], ang_vec_norm[:, 0]))
+        # deg_ang = deg_ang + 90
+        # mask = deg_ang < 0
+        # deg_ang[mask] += 360.0
+        # deg_ang = np.unwrap(deg_ang)
         parameter_set = np.column_stack((deg_ang, origin_offset))
 
         fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
         ax[0,0].scatter(pc[:, 0], pc[:, 1])
-        ax[0,0].set_xlabel("X")
-        ax[0,0].set_ylabel("Y")
+        ax[0,0].set_xlabel("X (m)")
+        ax[0,0].set_ylabel("Y (m)")
+        ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], color='r')
 
-        ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
+
+        # Plot Line Models in Parameter Space
+        polar_r = np.linalg.norm(condensed_param_set, axis=1)
+        ax[0,1].remove()
+        ax_polar = fig.add_subplot(2, 2, 2, projection='polar')
+        ax_polar.scatter(np.radians(deg_ang), polar_r)
+        # ax_polar.set_xlim(0, np.pi)
+        # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
         ax[0,1].set_xlabel("Angles (deg)")
-        ax[0,1].set_ylabel("Distance (m)")
+        ax[0,1].set_ylabel("Origin Offset (m)")
 
-
-        tab10_colors = np.array(plt.cm.get_cmap('tab10').colors)
+    
+        # Plot the Line Models as "points" in Cartesian Space (Euclidean Space)
+        tab10_colors = np.array(plt.cm.get_cmap('tab20').colors)
         ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters])
-        t = np.linspace(0,np.pi*2,100)
+        # t = np.linspace(0,np.pi,100)
         ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
-        ax[1,0].set_xlabel("X")
-        ax[1,0].set_ylabel("Y")
+        ax[1,0].set_xlabel("X (m)")
+        ax[1,0].set_ylabel("Y (m)")
         ax[1,0].axis("equal")
 
-        # colors = [tab10_colors[i+1] for i in cluster_idx]
         ax[1,1].scatter(pc[:, 0], pc[:, 1])
-        # plot_fit_lines(ax[1,1], line_models, colors=tab10_colors[np.array(cluster_idx) +1])
         plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx) +1])
-        ax[1,1].set_xlabel("X")
-        ax[1,1].set_ylabel("Y")
+        ax[1,1].set_xlabel("X (m)")
+        ax[1,1].set_ylabel("Y (m)")
         
         plt.show()
 
