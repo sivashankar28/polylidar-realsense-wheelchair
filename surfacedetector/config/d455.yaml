@@ -3,7 +3,7 @@
   advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
     enabled: true  # Only activate playback if this is true
-    file: "data/D455/L_M0D_1.0.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
+    file: "data/D455/R_M0D_0.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
     repeat: false     # repeat bag after its over
   save:
     video: ""                   # currently doesn't do anything
@@ -115,13 +115,12 @@
       # ]
   linefitting:
     # first pass of extracting lines
-    window_size: 3 # window size to smooth points
-    dot_min: 0.97 # minium dot product between adjoining vectors to connect
-    # merging lines
-    max_idx_dist: 5 # maximum numer of point indices between lines
-    max_rmse: 1.0  # maximum RMSE fit of a merged line, ignored
-    min_dot_prod: 0.93 # minium dot product between lines to merge
-    max_ortho_dist: 0.05  # maximum orthogonal distance between two lines to be merged
-    # Final cleanup
-    min_points_line: 7  # minimum number of points in a line (n * .05 cm)
-
+    window_size: 6 # window size to smooth points
+    cluster_kwargs:
+      t: 0.10
+      criterion: "distance"
+    # Line Model Requirements
+    min_num_models: 3
+    max_ortho_offset: 0.05
+    min_inlier_ratio: 0.25
+    

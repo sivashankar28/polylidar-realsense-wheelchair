@@ -172,7 +172,6 @@ def process(data):
 
     t1 = time.perf_counter()
     filtered_top_points = filter_points_from_wheel_chair(top_points)  # <100 us
-    filtered_bottom_points = filter_points_from_wheel_chair(bottom_points)  # <100 us
     t2 = time.perf_counter()
 
     print("Visualize 3D Data")

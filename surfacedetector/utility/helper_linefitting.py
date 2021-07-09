@@ -80,7 +80,7 @@ def filter_points(top_points, max_z=0.5, max_dist=0.05, min_z=0.6):
     # need to roll it such that the jump starts on the first index
     return filtered_top_points
 
-def filter_points_from_wheel_chair(top_points, max_dist=0.05, min_dist_from_wc=0.06, max_dist_from_wc=1.7,
+def filter_points_from_wheel_chair(top_points, max_dist=0.05, max_planar_distance=0.9,
                                     wheel_chair_position=[0,0,0]):
     """Filters and simplifies 3D points belonging to a continuos line string.
         Also filter points that are are less than min_z distance away
@@ -93,12 +93,20 @@ def filter_points_from_wheel_chair(top_points, max_dist=0.05, min_dist_from_wc=0
     Returns:
         [ndarray]: Filtered 3D line string
     """
-    top_points_simplified = np.array(
-        simplify_radial_dist_3d(MatrixDouble(top_points), max_dist))
-    dist_from_wc = np.linalg.norm(top_points_simplified - wheel_chair_position, axis=1)
+    # TODO FIX simplify_radial_dist_3d (memory corruption requiring a copy)
+    top_points_simplified = np.copy(np.array(
+        simplify_radial_dist_3d(MatrixDouble(top_points), max_dist)))
+
+    # if top_points_simplified.shape[0] < 3 or np.count_nonzero(top_points_simplified) < 3:
+    #     print(top_points)
+    #     print(top_points_simplified)
+    #     raise ValueError('Not enough points after simplification')
+
+    dist_from_wc = np.linalg.norm(top_points_simplified[1:,:] - wheel_chair_position, axis=1) #TODO fix weird bug here in simplification
     nearest_dist_from_wc = dist_from_wc.min()
-    far_dist = nearest_dist_from_wc + max_dist_from_wc
-    a1 = (dist_from_wc < far_dist) & (dist_from_wc > nearest_dist_from_wc)
+    far_dist = nearest_dist_from_wc + max_planar_distance
+    a1 = (dist_from_wc < far_dist) & (dist_from_wc >= nearest_dist_from_wc)
+    # import ipdb; ipdb.set_trace()
 
     np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
@@ -106,6 +114,11 @@ def filter_points_from_wheel_chair(top_points, max_dist=0.05, min_dist_from_wc=0
     start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
 
     filtered_top_points = top_points_simplified[start_idx:end_idx, :]
+
+    if filtered_top_points.shape[0] < 3 or np.count_nonzero(filtered_top_points) < 3:
+        print(top_points)
+        print(top_points_simplified)
+        raise ValueError('Not enough points after simplification and segmenting')
     # need to roll it such that the jump starts on the first index
     return filtered_top_points
 
@@ -569,11 +582,14 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         x_points = points_[:, 0]
         y_points = points_[:, 1]
 
+        w = np.ones(x_points.shape[0])
+        w[0] = 0.25  # weight first and last a little  less
+        w[-1] = 0.25
+
         if line['flip_axis']:
             y_points = x_points
             x_points = points_[:, 1]
-
-        coef = np.polyfit(x_points, y_points, 1)
+        coef = np.polyfit(x_points, y_points, 1, w=w)
         poly1d_fn = np.poly1d(coef)
         
         inlier_abs_dev = ortho_dist[mask]
@@ -589,7 +605,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
 
 
 def extract_lines_parameterized(pc, idx_skip=1, window_size=6, 
-                                cluster_kwargs=dict(t=0.15, criterion='distance'),
+                                cluster_kwargs=dict(t=0.10, criterion='distance'),
                                 min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.25, 
                                 debug=False, **kwargs):
     """Extract possible lines within line segment point cloud
@@ -640,14 +656,24 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
     origin_offset = np.linalg.norm(intersection_point, axis=1)
     t4 = time.perf_counter()
     # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
-    condensed_param_set = ang_vec_norm * origin_offset[:, np.newaxis]
+    # Scale origin offset such that angles the average offset is 1 meters.
+    avg_offset = np.mean(origin_offset)
+    origin_offset_scaled = (1.0 -avg_offset) + origin_offset
+    condensed_param_set = ang_vec_norm * origin_offset_scaled[:, np.newaxis]
+    condensed_param_set_true = ang_vec_norm * origin_offset[:, np.newaxis]
 
     # 4. Cluster these points (which are line models!) using agglomerative clustering to find best "average" line models. 
     #    Only allow clusters with > min_num_models. Average models in a cluster to get final line model for that specific cluster.
     # cluster similar lines by point distance
-    clusters = cluster_lines(condensed_param_set, cluster_kwargs=cluster_kwargs)
-    cluster_average, cluster_idx = average_clusters(condensed_param_set, clusters, min_num_models=min_num_models)
-    t5 = time.perf_counter()
+    try:
+        clusters = cluster_lines(condensed_param_set, cluster_kwargs=cluster_kwargs)
+        cluster_average, cluster_idx = average_clusters(condensed_param_set_true, clusters, min_num_models=min_num_models)
+        t5 = time.perf_counter()
+    except Exception as e:
+        logging.exception("Something went wrong during clustering")
+        pprint(pc)
+        pprint(condensed_param_set)
+        raise
 
     # Decompose the angle and the origin offset
     ang_vec_norm_cluster, _ = normalized(cluster_average)
@@ -738,6 +764,14 @@ def rotate_vectors(vectors, transform):
     rot = transform[:3, :3]
     new_vec = rot @ vectors
     return new_vec
+
+def transform_points(points, transform):
+    """
+    Transform points using a given 4x4 transformation matrix
+    """
+    points_ = np.hstack((points, np.ones((points.shape[0], 1))))
+    points_transformed = np.matmul(points_, transform.transpose())[:, :3]
+    return points_transformed
 
 def get_turning_manuever(platform_center_sensor_frame, platform_normal_sensor_frame, sensor_to_wheel_chair_transform, **kwargs):
     """Will compute the turning manuever for the wheelchair. CC = Counter Clockwise
