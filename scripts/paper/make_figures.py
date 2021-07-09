@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 
 DATA_DIR = Path('./data/scratch_test')
 
-font = {'family' : 'normal',
+font = {'family' : 'sans-serif',
         'size'   : 12}
 
 matplotlib.rc('font', **font)

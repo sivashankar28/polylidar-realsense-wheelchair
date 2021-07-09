@@ -892,41 +892,58 @@ def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_nor
     return result
 
 def plot_maneuver(result, best_fit_line):
+
     platform_poi_pos_wheel_chair = result['platform_poi_pos_wheel_chair_frame']
     platform_center = result['platform_center_pos_wheel_chair_frame']
     platform_square = best_fit_line['square_points']
 
-    platform_normal = -0.62 *result['platform_normal_inverted_unit']
+    # Manually scale platform normal to reach POI
     fig, ax = plt.subplots(1, 1)
+    # Plot Platform center
     ax.scatter(platform_center[0], platform_center[1], c='k', zorder=3)
-    # ax.plot(platform_square[:2, 0], platform_square[:2, 1], c=[1.0, 0.0, 0.0, 1.0])
-    ax.text(platform_center[0] - 0.37, platform_center[1], 'platform')
-    ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c=[[0, 1, 0]], zorder=5)
-    ax.text(platform_poi_pos_wheel_chair[0] - 0.16, platform_poi_pos_wheel_chair[1], 'poi', zorder=5)
+    # Plot Platform Line (square box projected to XY plane)
+    ax.plot(platform_square[:2, 0], platform_square[:2, 1], c=[1.0, 0.0, 0.0, 1.0])
+    ax.text(platform_center[0] - 0.25, platform_center[1], 'Curb')
+    # Plot POI
+    ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c='tab:blue', ec='k', zorder=5)
+    ax.text(platform_poi_pos_wheel_chair[0] - 0.18, platform_poi_pos_wheel_chair[1]-0.01, 'POI', zorder=5)
+    # Plot Wheel chair origin
     ax.scatter(0, 0, c='k', zorder=4)
     ax.text(0.05, -0.05, 'Wheel Chair Origin')
 
     # Plot Platform Normal (red)
-    arrow_platform_normal = arrow_(ax, platform_center[0], platform_center[1], platform_normal[0], platform_normal[1], ec='r', fc='r', width=.01) #label=rf'Platform Normal, $\boldsymbol{$\alpha$}$'
+    platform_normal = -0.62 *result['platform_normal_inverted_unit']
+    arrow_platform_normal = arrow_(ax, platform_center[0], platform_center[1], platform_normal[0], platform_normal[1], ec='tab:red', fc='tab:red', width=.01) #label=rf'Platform Normal, $\boldsymbol{$\alpha$}$'
     # Plot Wheel Chair Direction (green)
-    arrow_wc_dir = arrow_(ax, 0.0, 0.0, 0, 1.0, ec='g', fc='g', width=.01)
+    arrow_wc_dir = arrow_(ax, 0.0, 0.0, 0, 1.0, ec='tab:green', fc='tab:green', width=.01)
     # Plot Direction to POI from Wheel Chair Start (blue)
-    arrow_poi_dir = arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='b', fc='b', width=.01)
+    arrow_poi_dir = arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='tab:blue', fc='tab:blue', width=.01)
     # Plot Platform Inverted Normal (red)
-    arrow_normal_inv = arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='r', fc='r', width=.01)
+    arrow_normal_inv = arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='tab:purple', fc='tab:purple', width=.01)
 
     # Angle Annotations
     AngleAnnotation((0.0, 0.0),[0, 1], result['vec_wheel_chair_to_poi_2D_unit'], ax=ax, fig=fig, size=125, text=rf'$\alpha$', textposition='outside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
     AngleAnnotation((0.0, 0.0),result['platform_normal_inverted_unit'][:2], [0,1], ax=ax, fig=fig, size=175, text=rf'$\beta$', textposition='outside')
 
+    # Create Legend, need custom code to draw arrows
+    import matplotlib.patches as mpatches
+    from matplotlib.legend_handler import HandlerPatch
+    def make_legend_arrow(legend, orig_handle,
+                        xdescent, ydescent,
+                        width, height, fontsize):
+        p = mpatches.FancyArrow(0, 0.5*height, width, 0, length_includes_head=True, head_width=0.75*height )
+        return p
     # Platform normal vector
-    ax.axis('equal')
-    plt.legend([arrow_platform_normal, arrow_wc_dir], 
-            [r'Platform Normal, $\mathbf{n_p}$',
-             r'Wheelchair Direction, $\mathbf{v_1}$'
-             ], loc='upper right', fontsize=11)
+    plt.legend([arrow_platform_normal, arrow_wc_dir, arrow_poi_dir, arrow_normal_inv], 
+            [r'Curb Normal, $\mathbf{n_c}$',
+             r'Wheelchair Direction, $\mathbf{v_1}$',
+             r'POI Direction, $\mathbf{v_2}$',
+             r'Inv Curb Normal, $-\mathbf{n_c}$'
+             ], loc='upper right', fontsize=11,
+             handler_map={mpatches.FancyArrow : HandlerPatch(patch_func=make_legend_arrow),
+                    })
 
-    # 'Platform Normal, $\mathbf{\alpha}$
+    ax.axis('equal')
 
 
 def arrow_(ax, x, y, dx, dy, **kwargs):
