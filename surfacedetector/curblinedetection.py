@@ -452,7 +452,7 @@ def capture(config, video=None):
                             #If there are two lines only choose the first one
                             platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
                             platform_normal_wheel_chair_frame = best_fit_lines[0]['hplane_normal']
-                            result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, 
+                            result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, best_fit_line=best_fit_lines[0],
                                                               poi_offset=config.get('poi_offset', 0.7), debug=False)
                             # plt.show()
 
@@ -470,7 +470,8 @@ def capture(config, video=None):
                             plot_points(square_points_sensor_frame, proj_mat, color_image, config)
                             # plot_points(best_fit_lines[0]['points_3d_orig'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
-                                plot_points(best_fit_lines[1]['square_points'], proj_mat, color_image, config)
+                                square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
+                                plot_points(square_points_sensor_frame, proj_mat, color_image, config)
                             have_results = True
                         else:
                             logging.warning("Line Detector Failed")

@@ -37,6 +37,7 @@ from pprint import pprint
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points
+from surfacedetector.utility.AngleAnnotation import AngleAnnotation
 
 
 def choose_plane(first_plane, second_plane):
@@ -717,7 +718,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         tab10_colors = np.array(plt.cm.get_cmap('tab20').colors)
         ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters])
         # t = np.linspace(0,np.pi,100)
-        ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
+        # ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
         ax[1,0].set_xlabel("X (m)")
         ax[1,0].set_ylabel("Y (m)")
         ax[1,0].axis("equal")
@@ -830,7 +831,7 @@ def compute_2D_angle_difference(vector1, vector2):
 
     return angle
 
-def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, poi_offset=0.5, debug=False, **kwargs):
+def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, best_fit_line, poi_offset=0.5, debug=False, **kwargs):
     """Will compute the turning manuever for the wheelchair. CC = Counter Clockwise
     Assumes that the wheelchair reference frame origin is the center of rotation for wheelchair turn commands
     Maneuvers Steps:
@@ -886,33 +887,52 @@ def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_nor
     if debug:
         print(f"Alpha Angle {alpha:.1f}; Beta Angle: {beta:.1f}")
         print(f"First Turn CC: {first_turn:.1f} degrees; Move Distance: {dist_poi:.2f}; Second Turn: {second_turn:.1f}")
-        plot_maneuver(result)
+        plot_maneuver(result, best_fit_line)
 
     return result
 
-def plot_maneuver(result):
+def plot_maneuver(result, best_fit_line):
     platform_poi_pos_wheel_chair = result['platform_poi_pos_wheel_chair_frame']
     platform_center = result['platform_center_pos_wheel_chair_frame']
+    platform_square = best_fit_line['square_points']
 
+    platform_normal = -0.62 *result['platform_normal_inverted_unit']
     fig, ax = plt.subplots(1, 1)
-    ax.scatter(platform_center[0], platform_center[1], c=[[1, 0, 0]])
-    ax.text(platform_center[0] + 0.03, platform_center[1], 'platform')
-    ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c=[[0, 1, 0]])
-    ax.text(platform_poi_pos_wheel_chair[0] + 0.03, platform_poi_pos_wheel_chair[1], 'poi')
-    ax.scatter(0, 0, c='k')
-    ax.text(0.01, 0, 'Wheel Chair')
-    arrow_(ax, 0.0, 0.0, 0, 1, ec='g', fc='g', width=.01)
-    arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='b', fc='b', width=.01)
-    arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='r', fc='r', width=.01)
-    ax.text(result['vec_wheel_chair_to_poi_2D_unit'][0] / 2.0, (result['vec_wheel_chair_to_poi_2D_unit'][1] + 1) / 2.0, rf'$\alpha={result["alpha"]:.0f}^\circ$')
-    ax.text((0.0 + result['platform_normal_inverted_unit'][0]) / 2.0, 
-        (1.0 + result['platform_normal_inverted_unit'][1]) / 2.0, rf'$\beta={result["beta"]:.0f}^\circ$')
+    ax.scatter(platform_center[0], platform_center[1], c='k', zorder=3)
+    # ax.plot(platform_square[:2, 0], platform_square[:2, 1], c=[1.0, 0.0, 0.0, 1.0])
+    ax.text(platform_center[0] - 0.37, platform_center[1], 'platform')
+    ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c=[[0, 1, 0]], zorder=5)
+    ax.text(platform_poi_pos_wheel_chair[0] - 0.16, platform_poi_pos_wheel_chair[1], 'poi', zorder=5)
+    ax.scatter(0, 0, c='k', zorder=4)
+    ax.text(0.05, -0.05, 'Wheel Chair Origin')
+
+    # Plot Platform Normal (red)
+    arrow_platform_normal = arrow_(ax, platform_center[0], platform_center[1], platform_normal[0], platform_normal[1], ec='r', fc='r', width=.01) #label=rf'Platform Normal, $\boldsymbol{$\alpha$}$'
+    # Plot Wheel Chair Direction (green)
+    arrow_wc_dir = arrow_(ax, 0.0, 0.0, 0, 1.0, ec='g', fc='g', width=.01)
+    # Plot Direction to POI from Wheel Chair Start (blue)
+    arrow_poi_dir = arrow_(ax, 0.0, 0.0, result['vec_wheel_chair_to_poi_2D_unit'][0], result['vec_wheel_chair_to_poi_2D_unit'][1], ec='b', fc='b', width=.01)
+    # Plot Platform Inverted Normal (red)
+    arrow_normal_inv = arrow_(ax,0.0, 0.0, result['platform_normal_inverted_unit'][0], result['platform_normal_inverted_unit'][1], ec='r', fc='r', width=.01)
+
+    # Angle Annotations
+    AngleAnnotation((0.0, 0.0),[0, 1], result['vec_wheel_chair_to_poi_2D_unit'], ax=ax, fig=fig, size=125, text=rf'$\alpha$', textposition='outside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
+    AngleAnnotation((0.0, 0.0),result['platform_normal_inverted_unit'][:2], [0,1], ax=ax, fig=fig, size=175, text=rf'$\beta$', textposition='outside')
+
+    # Platform normal vector
     ax.axis('equal')
+    plt.legend([arrow_platform_normal, arrow_wc_dir], 
+            [r'Platform Normal, $\mathbf{n_p}$',
+             r'Wheelchair Direction, $\mathbf{v_1}$'
+             ], loc='upper right', fontsize=11)
+
+    # 'Platform Normal, $\mathbf{\alpha}$
+
 
 def arrow_(ax, x, y, dx, dy, **kwargs):
-    ax.arrow(x, y, dx, dy, **kwargs)
+    arrow = ax.arrow(x, y, dx, dy, **kwargs)
     ax.scatter(x + dx + 0.1, y + dy + 0.1, alpha=0.0)
-
+    return arrow
 def get_theta_and_distance(plane_normal, point_on_plane, ground_normal):
     """
     This code calculates the angle and distance to the curb

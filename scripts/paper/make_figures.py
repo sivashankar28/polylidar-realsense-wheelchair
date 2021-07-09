@@ -7,6 +7,7 @@ from scipy.spatial.transform import Rotation as R
 from joblib import load
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 from matplotlib import cm
 import numpy as np
 import open3d as o3d
@@ -15,12 +16,17 @@ import open3d.visualization.rendering as rendering
 from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d
 from scripts.paper.visgui import AppWindow
 
-from surfacedetector.utility.helper_linefitting import extract_lines_wrapper, extract_lines_wrapper_new,filter_points_from_wheel_chair, choose_plane, rotate_data_planar
+from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever
 
 logging.basicConfig(level=logging.INFO)
 
 
 DATA_DIR = Path('./data/scratch_test')
+
+font = {'family' : 'normal',
+        'size'   : 12}
+
+matplotlib.rc('font', **font)
 
 
 def make_line(points, lines=None, color=[0, 1, 0], add_endpoints=False):
@@ -181,6 +187,12 @@ def process(data):
 
     best_fit_lines = extract_lines_wrapper_new(
         filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], debug=True)  # ~2ms
+
+    platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
+    platform_normal_wheel_chair_frame = best_fit_lines[0]['hplane_normal']
+    result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, best_fit_lines[0],
+                                        poi_offset=0.75, debug=True)
+    plt.show()
 
     visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0],
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
