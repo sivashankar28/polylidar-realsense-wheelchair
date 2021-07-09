@@ -268,6 +268,8 @@ def orthogonal_distance(line_point, line_vec, points, return_median=True):
     else:
         return lengths
 
+    
+
 
 def check_merge_line(points, line, line_next, i, max_idx_dist=5, max_rmse=1.0, min_dot_prod=0.93, max_ortho_dist=0.05, **kwargs):
     idx_diff = line_next['idx'][0] - line['idx'][1]
@@ -552,13 +554,12 @@ def create_line_model(line_point, line_vec, points, max_slope=2.0):
     coef = [m, b]
 
     poly1d_fn = np.poly1d(coef)
-    
     res = dict(points=points, x_points=x_points, y_points=y_points, fn=poly1d_fn,
-            dir_vec=line_vec, line_point=line_point, flip_axis=flip_axis, points_2d_orig=points)
+            dir_vec=line_vec, line_point=line_point, flip_axis=flip_axis, points_2d_orig=points, rmse=0.0)
 
     return res
 
-def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.25):
+def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.15):
     filtered_line_models = []
     for line in lines:
         line_point = line['line_point']
@@ -569,6 +570,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
         mask = ortho_dist < max_ortho_offset
         points_ = all_points[mask, :]
+        inlier_abs_dev = ortho_dist[mask]
 
         ortho_dist**2
 
@@ -592,8 +594,6 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         coef = np.polyfit(x_points, y_points, 1, w=w)
         poly1d_fn = np.poly1d(coef)
         
-        inlier_abs_dev = ortho_dist[mask]
-
         line['fn'] = poly1d_fn
         line['x_points'] = x_points
         line['y_points'] = y_points
@@ -606,7 +606,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
 
 def extract_lines_parameterized(pc, idx_skip=1, window_size=6, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
-                                min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.25, 
+                                min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.15, 
                                 debug=False, **kwargs):
     """Extract possible lines within line segment point cloud
     0. Dowsample point cloud segment by skipping over points with by index (idx_skip)
@@ -616,7 +616,7 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
     4. Cluster these points (which are line models!) using agglomerative clustering to find best "average" line models. 
     5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     """
-    np.set_printoptions(precision=2, suppress=True)
+    np.set_printoptions(precision=4, suppress=True)
     t1 = time.perf_counter()
     pc_skip = pc[::idx_skip, :] # skip point to reduce noise
     # 1. Create vectors for each line segment
@@ -643,24 +643,24 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
     mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge:-skip_window_edge, :]
     # Unit vector of angle estimate of line direction
     line_vec_norm, _ = normalized(diff_smooth_filt)
+    mask = line_vec_norm[:, 0] < 0
+    line_vec_norm[mask] = -1 * line_vec_norm[mask, :] # change directionality of line_vec_norm if angle is negative value (always point +x)
     # convert to original unit vector of line angle. Basically this unit vector of a line starting from origin that orthogonally intersects with the line estimate
     # this is done as a 90 degree rotation of the line vector
     rot = np.array([[np.cos(np.pi/2), -np.sin(np.pi/2.0)], [np.sin(np.pi/2.0), np.cos(np.pi/2.0)]])
     ang_vec_norm = np.matmul(line_vec_norm, rot.transpose())
 
     # Now we need to get orthogonal offset of this line from origin
-    numer = np.einsum('ij,ij->i', diff_smooth_filt, mid_point)
-    denom = -np.linalg.norm((diff_smooth_filt * diff_smooth_filt), axis=1)
-    t = numer/denom
-    intersection_point = t[:, np.newaxis] * diff_smooth_filt + mid_point
-    origin_offset = np.linalg.norm(intersection_point, axis=1)
+    origin_offset = np.einsum('ij,ij->i', line_vec_norm, mid_point)[:, np.newaxis] * line_vec_norm - mid_point
+    origin_offset = np.linalg.norm(origin_offset, axis=1)
     t4 = time.perf_counter()
     # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
     # Scale origin offset such that angles the average offset is 1 meters.
     avg_offset = np.mean(origin_offset)
-    origin_offset_scaled = (1.0 -avg_offset) + origin_offset
-    condensed_param_set = ang_vec_norm * origin_offset_scaled[:, np.newaxis]
-    condensed_param_set_true = ang_vec_norm * origin_offset[:, np.newaxis]
+    offset_add = max(-0.10, (1.0 -avg_offset))
+    origin_offset_scaled = offset_add + origin_offset
+    condensed_param_set = ang_vec_norm * origin_offset_scaled[:, np.newaxis] # used for clustering
+    condensed_param_set_true = ang_vec_norm * origin_offset[:, np.newaxis] # true parametrization of line angle and origin offset
 
     # 4. Cluster these points (which are line models!) using agglomerative clustering to find best "average" line models. 
     #    Only allow clusters with > min_num_models. Average models in a cluster to get final line model for that specific cluster.
@@ -682,7 +682,7 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
 
     # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     line_models = [create_line_model(cluster_average[i,:], line_vec_norm[i, :], pc) for i in range(cluster_average.shape[0])]
-    line_models = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
+    line_models_filtered = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
 
     if debug:
         # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
@@ -711,7 +711,8 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
 
         # colors = [tab10_colors[i+1] for i in cluster_idx]
         ax[1,1].scatter(pc[:, 0], pc[:, 1])
-        plot_fit_lines(ax[1,1], line_models, colors=tab10_colors[np.array(cluster_idx) +1])
+        # plot_fit_lines(ax[1,1], line_models, colors=tab10_colors[np.array(cluster_idx) +1])
+        plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx) +1])
         ax[1,1].set_xlabel("X")
         ax[1,1].set_ylabel("Y")
         
@@ -724,7 +725,7 @@ def extract_lines_parameterized(pc, idx_skip=1, window_size=6,
         # ms5 = (t6-t5) * 1000
         # print(ms1, ms2, ms3, ms4)
 
-    return line_models
+    return line_models_filtered
 
 def extract_lines_wrapper_new(top_points, top_normal, **kwargs):
     t1 = time.perf_counter()

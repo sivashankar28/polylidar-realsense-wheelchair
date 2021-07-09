@@ -431,12 +431,12 @@ def capture(config, video=None):
                     curb_height, first_plane, second_plane = analyze_planes_updated(geometric_planes)
                     fname = Path(config['playback']['file']).stem
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
-                    # dump(dict(first_plane=first_plane, second_plane=second_plane, 
-                    #         color_image=color_image_cv, depth_image=depth_image_cv, 
-                    #         planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
-                    #         sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
-                    #         f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
-                    # input("Press Enter to move to next frame...")
+                    dump(dict(first_plane=first_plane, second_plane=second_plane, 
+                            color_image=color_image_cv, depth_image=depth_image_cv, 
+                            planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
+                            sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
+                            f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
+                    input("Press Enter to move to next frame...")
                 
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:

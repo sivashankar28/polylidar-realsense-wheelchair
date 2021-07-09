@@ -3,7 +3,7 @@
   advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
     enabled: true  # Only activate playback if this is true
-    file: "data/D455/R_M0D_0.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
+    file: "data/D455/R_R45D_1.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
     repeat: false     # repeat bag after its over
   save:
     video: ""                   # currently doesn't do anything
@@ -123,4 +123,3 @@
     min_num_models: 3
     max_ortho_offset: 0.05
     min_inlier_ratio: 0.25
-    
