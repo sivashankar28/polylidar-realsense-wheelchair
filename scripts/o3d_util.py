@@ -83,8 +83,7 @@ def create_box(geom_dict, set_origin_to_front=False):
     return [geom, cf]
 
 def create_point(geom_dict):
-
-    geom = o3d.geometry.TriangleMesh.create_octahedron(geom_dict['size'])
+    geom = o3d.geometry.TriangleMesh.create_sphere(geom_dict['size'])
     geom.compute_vertex_normals()
 
     transform = compute_transform(geom_dict)

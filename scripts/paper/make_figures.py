@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import cm
+from matplotlib import colors as mcolors
 import numpy as np
 import open3d as o3d
 import open3d.visualization.gui as gui
@@ -17,6 +18,7 @@ from surfacedetector.utility.helper_general import set_axes_equal, plot_points, 
 from scripts.paper.visgui import AppWindow
 
 from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever, transform_points
+from scripts.o3d_util import create_point
 
 logging.basicConfig(level=logging.INFO)
 
@@ -27,6 +29,8 @@ font = {'family' : 'sans-serif',
         'size'   : 12}
 
 matplotlib.rc('font', **font)
+
+TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
 
 
 def make_line(points, lines=None, color=[0, 1, 0], add_endpoints=False):
@@ -66,7 +70,7 @@ def get_camera_intrinsics_o3d(vfov=90, hfov=65, resolution=[480, 848]):
     cy = resolution[1] / 2
     return o3d.camera.PinholeCameraIntrinsic(resolution[0], resolution[1], fx, fy, cx, cy)
 
-def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None, fit_line=None,
+def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None, fit_line=None, result=None,
                 first_points_label="Top Plane", second_points_label="Bottom Plane", filtered_points_label="Filtered Points",
                 sensor_to_wheel_chair_transform=None,
                 color_image=None, depth_image=None):
@@ -88,10 +92,24 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
 
     win.mat_line = mat_line
 
-    if fit_line:
+    if fit_line and result:
+        # Add Curb
         square_point_set = fit_line['square_points']
         square_line = make_line(square_point_set, color=[1,0,0], add_endpoints=True)
-        win._scene.scene.add_geometry("Platform", square_line, mat_line)
+        win._scene.scene.add_geometry("Estimated Curb", square_line, mat_line)
+        # Add POI Point
+        poi_pos = result['platform_poi_pos_wheel_chair_frame']
+        platform_poi = dict(parent=None, center_point=poi_pos, size=0.03, rotation=dict(roll=0, pitch=0, yaw=0), color=TABLEAU_COLORS['tab:blue'][:3])
+        win._scene.scene.add_geometry("POI", create_point(platform_poi)[0], lit)
+
+        dist_poi = result['dist_poi']
+        curb_cp = result['platform_center_pos_wheel_chair_frame']
+        # Add Curb Normal
+        curb_normal = o3d.geometry.TriangleMesh.create_arrow(cylinder_radius=0.005, cone_radius=0.01, cylinder_height=dist_poi - 0.05, cone_height=0.02).translate(curb_cp)
+        #curb_normal= platfrom_normal.compute_vertex_normals().paint_uniform_color([1, 0, 0]).rotate(platfrom_normal.get_rotation_matrix_from_xyz([np.pi/2, 0, 0]))
+        win._scene.scene.add_geometry("Curb Normal", curb_normal, lit)
+
+
 
     # vis = o3d.visualization.O3DVisualizer("Wheel Chair Curb Mounting Visualization", 1024, 768)
     # win.ground_plane = o3d.visualization.rendering.Scene.GroundPlane.XY
@@ -186,7 +204,7 @@ def process(data):
                                         poi_offset=0.75, debug=True)
     plt.show()
 
-    visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0],
+    visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0], result=result,
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
                 color_image=color_image, depth_image=depth_image)
 
