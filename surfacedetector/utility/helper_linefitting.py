@@ -883,7 +883,7 @@ def compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_nor
     result = dict(alpha=alpha, beta=beta, dist_poi=dist_poi, ortho_dist_platform=ortho_dist_platform,first_turn=first_turn, second_turn=second_turn, 
                 vec_wheel_chair_to_poi_2D_unit=vec_wheel_chair_to_poi_2D_unit, platform_normal_inverted_unit=platform_normal_inverted_unit,
                 platform_center_pos_wheel_chair_frame=platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame=platform_normal_wheel_chair_frame,
-                platform_poi_pos_wheel_chair_frame=platform_poi_pos_wheel_chair_frame)
+                platform_poi_pos_wheel_chair_frame=platform_poi_pos_wheel_chair_frame, poi_offset=poi_offset)
     if debug:
         print(f"Alpha Angle {alpha:.1f}; Beta Angle: {beta:.1f}")
         print(f"First Turn CC: {first_turn:.1f} degrees; Move Distance: {dist_poi:.2f}; Second Turn: {second_turn:.1f}")

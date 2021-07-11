@@ -88,3 +88,9 @@ Uses solid state lidar technology.
 4. Brand new sensor with a few bugs and issues.
 5. Does not work well on angled surfaces. In other words it works best on flat surface directly in front of it.
 
+
+## Scripts for Figures
+
+0. `python -m surfacedetector.curblinedetection -c surfacedetector/config/d455.yaml`
+1. `python -m scripts.paper.make_figures --file data/scratch_test/planes_R_R45D_1.5_0001.joblib`
+

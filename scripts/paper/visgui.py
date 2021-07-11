@@ -159,7 +159,7 @@ class Settings:
         # Conveniently, assigning from self._materials[...] assigns a reference,
         # not a copy, so if we change the property of a material, then switch
         # to another one, then come back, the old setting will still be there.
-        self.material = self._materials[Settings.LIT]
+        self.material = self._materials[Settings.UNLIT]
 
     def set_material(self, name):
         self.material = self._materials[name]
