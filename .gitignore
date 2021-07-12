@@ -1,6 +1,7 @@
 *.txt
 *.las
 *.avi
+*.pkl
 *.bag
 *.csv
 .vscode

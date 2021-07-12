@@ -4,7 +4,7 @@ import logging
 import time
 from scipy.spatial.transform import Rotation as R
 import warnings
-from joblib import load
+from joblib import load, dump
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -41,6 +41,42 @@ TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.item
 
 print(TABLEAU_COLORS)
 
+
+ToGLCamera = np.array([
+    [1,  0,  0,  0],
+    [0,  -1,  0,  0],
+    [0,  0,  -1,  0],
+    [0,  0,  0,  1]
+])
+FromGLGamera = np.linalg.inv(ToGLCamera)
+
+def model_matrix_to_extrinsic_matrix(model_matrix):
+    return np.linalg.inv(model_matrix @ FromGLGamera)
+
+def create_camera_intrinsic_from_size(width=1024, height=768, hfov=60.0, vfov=60.0):
+    fx = (width / 2.0)  / np.tan(np.radians(hfov)/2)
+    fy = (height / 2.0)  / np.tan(np.radians(vfov)/2)
+    fx = fy # not sure why, but it looks like fx should be governed/limited by fy
+    return np.array(
+        [[fx, 0, width / 2.0],
+         [0, fy, height / 2.0],
+         [0, 0,  1]])
+
+def save_view(vis, fname='./scripts/paper/saved_view.pkl'):
+    model_matrix = np.asarray(vis.scene.camera.get_model_matrix())
+    extrinsic = model_matrix_to_extrinsic_matrix(model_matrix)
+    width, height = vis.size.width, vis.size.height
+    intrinsic = create_camera_intrinsic_from_size(width, height)
+    saved_view = dict(extrinsic=extrinsic, intrinsic=intrinsic, width=width, height=height)
+    dump(saved_view, fname)
+
+def load_view(vis, fname="./scripts/paper/saved_view.pkl"):
+    try:
+        saved_view = load(fname)
+        vis.setup_camera(saved_view['intrinsic'], saved_view['extrinsic'], saved_view['width'], saved_view['height'])
+        # Looks like the ground plane gets messed up, no idea how to fix
+    except:
+        print("Can't find file")
 
 def make_line(points, lines=None, color=[0, 1, 0], add_endpoints=False):
     points = np.array(points)
@@ -175,8 +211,15 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
     try:
         bounds = o3d_low_scene.bounding_box
         o3d_top_scene.setup_camera(60.0, bounds, bounds.get_center())
+        # o3d_scene.scene.camera.copy_from( o3d_scene.scene.camera)
+        # o3d_top_scene.setup_camera(60.0, [0.5, 2.5, 0], [0, -3, 2], [0, 0, 1])
     except Exception as e:
         o3d_top_scene.reset_camera_to_default()
+
+    vis.add_action("Save Camera View", save_view)
+    vis.add_action("Load Camera View", load_view)
+
+    # import pdb; pdb.set_trace()
     gui.Application.instance.run()
 
 
