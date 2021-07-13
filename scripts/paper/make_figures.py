@@ -31,16 +31,10 @@ warnings.filterwarnings(
 
 
 DATA_DIR = Path('./data/scratch_test')
-
 font = {'family' : 'sans-serif',
         'size'   : 12}
-
 matplotlib.rc('font', **font)
-
 TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
-
-print(TABLEAU_COLORS)
-
 
 ToGLCamera = np.array([
     [1,  0,  0,  0],
@@ -49,6 +43,48 @@ ToGLCamera = np.array([
     [0,  0,  0,  1]
 ])
 FromGLGamera = np.linalg.inv(ToGLCamera)
+
+
+# def create_grid()
+def grid(size=10, n=10, color=[0.5, 0.5, 0.5], plane='xy', plane_offset=0, translate=[0, 0, 0]):
+    """draw a grid on xz plane"""
+
+    # lineset = o3d.geometry.LineSet()
+    s = size / float(n)
+    s2 = 0.5 * size
+    points = []
+
+    for i in range(0, n + 1):
+        x = -s2 + i * s
+        points.append([x, -s2, plane_offset])
+        points.append([x, s2, plane_offset])
+    for i in range(0, n + 1):
+        z = -s2 + i * s
+        points.append([-s2, z, plane_offset])
+        points.append([s2, z, plane_offset])
+
+    points = np.array(points)
+    if plane == 'xz':
+        points[:,[2,1]] = points[:,[1,2]]
+
+    points = points + translate
+
+    n_points = points.shape[0]
+    lines = [[i, i + 1] for i in range(0, n_points -1, 2)]
+    colors = [list(color)] * (n_points - 1)
+    return points, lines, colors
+
+def create_o3d_grid(**kwargs):
+    points, lines, colors = grid(**kwargs)
+
+    ls = o3d.geometry.LineSet()
+    ls.points = o3d.utility.Vector3dVector(points)
+    ls.lines = o3d.utility.Vector2iVector(lines)
+    ls.paint_uniform_color(kwargs['color'])
+    # ls.colors = o3d.utility.Vector3dVector(np.array(colors))
+
+    return ls
+
 
 def model_matrix_to_extrinsic_matrix(model_matrix):
     return np.linalg.inv(model_matrix @ FromGLGamera)
@@ -74,9 +110,10 @@ def load_view(vis, fname="./scripts/paper/saved_view.pkl"):
     try:
         saved_view = load(fname)
         vis.setup_camera(saved_view['intrinsic'], saved_view['extrinsic'], saved_view['width'], saved_view['height'])
+        # vis.reset_camera_to_default()
         # Looks like the ground plane gets messed up, no idea how to fix
-    except:
-        print("Can't find file")
+    except Exception as e:
+        print("Can't find file", e)
 
 def make_line(points, lines=None, color=[0, 1, 0], add_endpoints=False):
     points = np.array(points)
@@ -160,6 +197,10 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
     mat_line.shader = "unlitLine"
     mat_line.line_width = 5  # note that this is scaled with respect to pixels
 
+    mat_line_ground = o3d.visualization.rendering.Material()
+    mat_line_ground.shader = "unlitLine"
+    mat_line_ground.line_width = 2  # note that this is scaled with respect to pixels
+
     # win.mat_line = mat_line
 
     if fit_line and result:
@@ -171,6 +212,7 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
         poi_pos = result['platform_poi_pos_wheel_chair_frame']
         platform_poi = dict(parent=None, center_point=poi_pos, size=0.03, rotation=dict(roll=0, pitch=0, yaw=0), color=TABLEAU_COLORS['tab:blue'][:3])
         o3d_scene.add_geometry("POI", create_point(platform_poi)[0], lit)
+        o3d_scene.add_3d_label(poi_pos, "POI") 
 
         dist_poi = result['dist_poi']
         poi_offset = result['poi_offset']
@@ -187,7 +229,9 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
         inv_curb_normal_mesh  = create_arrow(o3d_scene, inv_curb_normal, [0, 0, 0], dist_poi - 0.05, lit, label="Inv Curb Normal", color=TABLEAU_COLORS['tab:purple'][:3])
 
 
-    o3d_low_scene.show_ground_plane(True, o3d.visualization.rendering.Scene.GroundPlane.XY)
+    grid = create_o3d_grid(size=20, n=20, color=[0.5, 0.5, 0.5])
+    o3d_scene.add_geometry("Grid", grid, mat_line_ground)
+    # o3d_low_scene.show_ground_plane(True, o3d.visualization.rendering.Scene.GroundPlane.XY)
     o3d_scene.add_geometry(first_points_label, first_points_o3d, mat_line)
     # Create Coordinate System
     cf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
@@ -206,7 +250,7 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
 
 
     cam_transform = np.eye(4) if sensor_to_wheel_chair_transform is None else np.linalg.inv(sensor_to_wheel_chair_transform)
-    ls_camera = o3d.geometry.LineSet.create_camera_visualization(get_camera_intrinsics_o3d(), cam_transform, scale=0.1)
+    ls_camera = o3d.geometry.LineSet.create_camera_visualization(get_camera_intrinsics_o3d(), cam_transform, scale=0.05)
     o3d_scene.add_geometry("Camera", ls_camera, mat_line)
     try:
         bounds = o3d_low_scene.bounding_box
