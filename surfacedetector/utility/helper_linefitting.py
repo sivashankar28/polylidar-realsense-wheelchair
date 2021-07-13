@@ -430,7 +430,7 @@ def project_points_geometric_plane(points, normal, point_on_plane):
 
 
 def recover_3d_lines(best_fit_lines, top_normal, height, 
-                     wheel_chair_origin_sensor_frame=[-0.34, 0, 0]):
+                     wheel_chair_origin_sensor_frame=[-0.34, 0, 0], curb_height=0.5):
     """This will recover 3D information of the lines
 
     Args:
@@ -466,7 +466,7 @@ def recover_3d_lines(best_fit_lines, top_normal, height,
             np.linalg.norm(line['hplane_normal'])
         line['hplane_point'] = line['points_3d'].mean(axis=0)
         line['square_points'] = make_square(
-            line['hplane_point'], line['plane_normal'] * -multiply, line['dir_vec_3d'], line['hplane_normal'])
+            line['hplane_point'], line['plane_normal'] * -multiply, line['dir_vec_3d'], line['hplane_normal'], h=curb_height)
         line['dist_to_line'] = np.linalg.norm(line['hplane_point'] - wheel_chair_origin_sensor_frame)
 
     return best_fit_lines
@@ -727,6 +727,8 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx) +1])
         ax[1,1].set_xlabel("X (m)")
         ax[1,1].set_ylabel("Y (m)")
+
+        fig.savefig('assets/pics/lines_string_vectors.png', bbox_inches='tight')
         
         plt.show()
 
@@ -739,7 +741,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
     return line_models_filtered
 
-def extract_lines_wrapper_new(top_points, top_normal, **kwargs):
+def extract_lines_wrapper_new(top_points, top_normal, curb_height=0.5, **kwargs):
     t1 = time.perf_counter()
     top_points_3d = rotate_data_planar(top_points, top_normal)
     top_points_2d = top_points_3d[:, :2]
@@ -747,7 +749,7 @@ def extract_lines_wrapper_new(top_points, top_normal, **kwargs):
     t2 = time.perf_counter()
     best_fit_lines = extract_lines_parameterized(top_points_2d, **kwargs)
     t3 = time.perf_counter()
-    best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height)
+    best_fit_lines = recover_3d_lines(best_fit_lines, top_normal, height, curb_height=curb_height)
     best_fit_lines = filter_lines(best_fit_lines, **kwargs)
     return best_fit_lines
 
@@ -944,6 +946,8 @@ def plot_maneuver(result, best_fit_line):
                     })
 
     ax.axis('equal')
+
+    fig.savefig('assets/pics/plot_maneuver.png', bbox_inches='tight')
 
 
 def arrow_(ax, x, y, dx, dy, **kwargs):

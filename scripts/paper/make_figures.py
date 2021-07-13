@@ -12,10 +12,12 @@ from matplotlib import cm
 from matplotlib import colors as mcolors
 import numpy as np
 import open3d as o3d
+import cv2
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d
 from scripts.paper.visgui import AppWindow
+from surfacedetector.utility.helper import plot_points as plot_points_cv2, plot_planes_and_obstacles
 
 from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever, transform_points
 from scripts.o3d_util import create_point
@@ -262,6 +264,10 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
 
     vis.add_action("Save Camera View", save_view)
     vis.add_action("Load Camera View", load_view)
+    try:
+        load_view(vis)
+    except Exception as e:
+        print("Error:", e)
 
     # import pdb; pdb.set_trace()
     gui.Application.instance.run()
@@ -293,16 +299,25 @@ def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
 
     plt.show()
 
-def process(data):
+def process(data, fname='planes_R_r45_1.5_0001'):
     """ Process the bottom and top planes dictionary """
 
     sensor_to_wheel_chair_transform = data['sensor_to_wheel_chair_transform']
     color_image= data['color_image']
     depth_image = data['depth_image']
+    planes = data['planes']
+    obstacles = data['obstacles']
+    proj_mat = data['proj_mat']
+    config = data['config']
     
     top_plane, bottom_plane = choose_plane(data['first_plane'], data['second_plane'])
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
     bottom_points = bottom_plane['all_points']
+
+
+    ## Save images
+    cv2.imwrite(f"./assets/pics/{fname}_rgb.png", data['color_image'])
+    cv2.imwrite(f"./assets/pics/{fname}_depth.png", data['depth_image'])
 
     # For visualization, I am converting from sensor frame to wheel chair frame
     # Usually, I did all line extraction in sensor frame, but visualization looks better in wheel chair frame
@@ -322,7 +337,7 @@ def process(data):
                 color_image=color_image, depth_image=depth_image)
 
     best_fit_lines = extract_lines_wrapper_new(
-        filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], debug=True)  # ~2ms
+        filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], debug=True, curb_height=data['curb_height'])  # ~2ms
 
     platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
     platform_normal_wheel_chair_frame = best_fit_lines[0]['hplane_normal']
@@ -333,6 +348,12 @@ def process(data):
     visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0], result=result,
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
                 color_image=color_image, depth_image=depth_image)
+
+    square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
+    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+    cv2.imwrite(f"./assets/pics/{fname}_poly.png",color_image)
+    plot_points_cv2(square_points_sensor_frame, proj_mat, color_image, config, color=(0, 0, 225), thickness=3)
+    cv2.imwrite(f"./assets/pics/{fname}_curb_estimate_with_poly.png",color_image)
 
     t3 = time.perf_counter()
     ms1 = (t2-t1) * 1000
