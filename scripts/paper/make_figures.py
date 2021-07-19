@@ -350,7 +350,7 @@ def process(data, fname='planes_R_r45_1.5_0001'):
                 color_image=color_image, depth_image=depth_image)
 
     square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
-    plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+    plot_planes_and_obstacles(planes[:1], obstacles, proj_mat, None, color_image, config)
     cv2.imwrite(f"./assets/pics/{fname}_poly.png",color_image)
     plot_points_cv2(square_points_sensor_frame, proj_mat, color_image, config, color=(0, 0, 225), thickness=3)
     cv2.imwrite(f"./assets/pics/{fname}_curb_estimate_with_poly.png",color_image)
