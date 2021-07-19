@@ -20,7 +20,7 @@ from joblib import dump, load
 
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastgac import GaussianAccumulatorS2Beta, IcoCharts
 
 logging.basicConfig(level=logging.INFO)
 
@@ -377,7 +377,7 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2(level=config['fastga']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
     ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
 
     if video:
@@ -431,13 +431,14 @@ def capture(config, video=None):
                     curb_height, first_plane, second_plane = analyze_planes_updated(geometric_planes)
                     fname = Path(config['playback']['file']).stem
                     color_image_cv, depth_image_cv = colorize_images_open_cv(color_image, depth_image, config)
-                    dump(dict(first_plane=first_plane, second_plane=second_plane, 
-                            color_image=color_image_cv, depth_image=depth_image_cv, curb_height=curb_height,
-                            planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
-                            sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
-                            f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
-                    input("Press Enter to move to next frame...")
+                    # dump(dict(first_plane=first_plane, second_plane=second_plane, 
+                    #         color_image=color_image_cv, depth_image=depth_image_cv, curb_height=curb_height,
+                    #         planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
+                    #         sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
+                    #         f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
+                    # input("Press Enter to move to next frame...")
                 
+                    found_curb = False
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
                         top_plane, _ = choose_plane(first_plane, second_plane)
@@ -447,7 +448,8 @@ def capture(config, video=None):
                         top_normal = np.array([0.0, 0.0, 1.0]) # hard code, this will work if frames are setup correctly in config file
                         filtered_top_points = filter_points_from_wheel_chair(top_points)  # <100 us
                         best_fit_lines = extract_lines_wrapper_new(filtered_top_points, top_normal, 
-                                        return_only_one_line=True, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], **config['linefitting']) #< 1.6ms
+                                        return_only_one_line=True, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], 
+                                        curb_height=curb_height, **config['linefitting']) #< 1.6ms
                         if best_fit_lines:
                             #If there are two lines only choose the first one
                             platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
@@ -468,19 +470,22 @@ def capture(config, video=None):
                             
                             square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
                             plot_points(square_points_sensor_frame, proj_mat, color_image, config)
+                            found_curb = True
                             # plot_points(best_fit_lines[0]['points_3d_orig'], proj_mat, color_image, config)
                             if len(best_fit_lines) > 2: 
-                                square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
-                                plot_points(square_points_sensor_frame, proj_mat, color_image, config)
+                                square_points_sensor_frame_2 = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
+                                plot_points(square_points_sensor_frame_2, proj_mat, color_image, config)
                             have_results = True
                         else:
                             logging.warning("Line Detector Failed")
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
 
-                    # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
+                    # Plot Curb points again to be "one top" of the poygon
+                    if found_curb:
+                        plot_points(square_points_sensor_frame, proj_mat, color_image, config)
 
                     # import ipdb; ipdb.set_trace()
                 # Show images
