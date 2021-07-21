@@ -95,7 +95,7 @@ def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
         mean = fit_line['points'].mean(axis=0)
         if annotate:
             ang = get_angle(fit_line['dir_vec'])
-            # print(fit_line['dir_vec'])
+            # print(fit_line['dir_vec'], ang)
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]), rotation=ang, ha='center', va='center', )
 
 def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):

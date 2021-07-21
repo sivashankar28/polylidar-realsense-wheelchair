@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import cm
 from matplotlib import colors as mcolors
+from matplotlib import rc
 import numpy as np
 import open3d as o3d
 import cv2
@@ -39,6 +40,10 @@ font = {'family' : 'sans-serif',
         'size'   : 12}
 matplotlib.rc('font', **font)
 TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
+params = {
+  "text.usetex": True,
+  "text.latex.preamble": r"\usepackage{amsmath} \usepackage{mathtools}"}
+matplotlib.rcParams.update(params)
 
 ToGLCamera = np.array([
     [1,  0,  0,  0],
@@ -61,7 +66,7 @@ def create_transform(translate=[0.0, 0.0], rot=45, deg=True):
     transform[:2, 2] = translate
     return transform
 
-def draw_brace_updated(ax, p1, p2, text, rotation=0):
+def draw_brace_updated(ax, p1, p2, text, rotation=0, zorder=1):
     """Draws an annotated brace on the axes."""
     ax.autoscale(False)
 
@@ -138,7 +143,7 @@ def draw_brace_updated(ax, p1, p2, text, rotation=0):
     alpha = (y_max - y_min) / 2.0
     text_center = text_center + dir_vec * alpha
 
-    ax.plot(x, y, color='black', lw=1)
+    ax.plot(x, y, color='black', lw=1, zorder=zorder)
     ax.text(text_center[0], text_center[1], text, ha='center', va='center', rotation=rotation)
 
 # def create_grid()
@@ -403,18 +408,24 @@ def demonstrate_lines():
     dir_vec = dir_vec / np.linalg.norm(dir_vec)
 
 
-    scatter_hdl = ax.scatter(x, y, color=TABLEAU_COLORS['tab:blue'], zorder=2)
-    line_hdl = ax.plot(x, y, color=TABLEAU_COLORS['tab:orange'], zorder=1)[0]
-    arrow_hdl = ax.arrow(0.0, 0.0, 0.5, 0.5, color=TABLEAU_COLORS['tab:green'], head_width=0.05,  width=0.01, \
-                length_includes_head=True)
+    # scatter_hdl = ax.scatter(x, y, color=TABLEAU_COLORS['tab:blue'], zorder=2)
+    ax.scatter(0.1, 0.9, color=TABLEAU_COLORS['tab:red'], ec='k', zorder=15)
+    arrow_hdl_1 = ax.arrow(0.1, 0.9, 0.2, -0.2, color=TABLEAU_COLORS['tab:red'], head_width=0.04,  width=0.008, \
+                length_includes_head=True, zorder=10)
+    line_hdl = ax.plot(x, y, color=TABLEAU_COLORS['tab:orange'], linewidth=2, zorder=5)[0]
+    arrow_hdl_2 = ax.arrow(0.0, 0.0, 0.5, 0.5, color=TABLEAU_COLORS['tab:green'], head_width=0.04,  width=0.008, \
+                length_includes_head=True, zorder=2)
 
 
+    # ax.annotate(r"$\begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + \alpha \begin{psmallmatrix}\sqrt{2}/2 \\ -\sqrt{2}/2 \end{psmallmatrix} $", (0.1, 0.95))
+    ax.annotate(r"$\mathbf{p} = \begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + t \begin{psmallmatrix}.707 \\ -.707 \end{psmallmatrix} $",
+                 (0.25, 0.84), size=12, rotation=-45, ha='center', va='center')
+    ax.annotate(r"$y = -1.0 x + 1.0$", (0.60, 0.46), size=12, rotation=-45, ha='center', va='center')
     AngleAnnotation((0.0, 0.0), [1, 0], [0.5, 0.5],ax=ax, fig=fig, size=220, text=r'$45^{\circ}$', textposition='inside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
-    ax.annotate(r"$y = -1.0 x + 1.0$", (0.50, 0.55))
-
-    draw_brace_updated(ax, (0.0,0.0), (0.5, 0.5), "offset")
-    ax.set_xlabel("X (m)")
-    ax.set_xlabel("Y (m)")
+    draw_brace_updated(ax, (0.0,0.0), (0.48, 0.48), r"offset=$.707$", zorder=15)
+    # draw_brace_updated(ax, (0.0,0.0), (0.48, 0.48), r"offset=$\sqrt{2}/2$", zorder=15)
+    ax.set_xlabel(r"X (m)")
+    ax.set_ylabel(r"Y (m)")
 
 
     import matplotlib.patches as mpatches
@@ -425,15 +436,16 @@ def demonstrate_lines():
         p = mpatches.FancyArrow(0, 0.5*height, width, 0, length_includes_head=True, head_width=0.75*height )
         return p
     # Platform normal vector
-    plt.legend([scatter_hdl, line_hdl, arrow_hdl], 
-            [r'Raw Data',
-             r'Fit Line, $y=mx+b$',
-             r'Angle/Offset',
-             ], loc='upper right', fontsize=10,
-             handler_map={mpatches.FancyArrow : HandlerPatch(patch_func=make_legend_arrow),
+    plt.legend([line_hdl, arrow_hdl_1, arrow_hdl_2], 
+            [r'Slope/Intercept',
+            r'Point/Vector',
+            r'Angle/Offset',
+            ], loc='upper right', fontsize=10,
+            handler_map={mpatches.FancyArrow : HandlerPatch(patch_func=make_legend_arrow),
                     })
 
-
+    ax.set_xlim(-0.05, 1.05)
+    ax.axis('equal')
     fig.savefig('assets/pics/line_representations.png', bbox_inches='tight')
     plt.show()
     

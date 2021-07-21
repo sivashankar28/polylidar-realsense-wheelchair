@@ -648,6 +648,11 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
     return filtered_line_models
 
 
+def set_up_axes(ax):
+    ax.set_xlabel(r"X (m)")
+    ax.set_ylabel(r"Y (m)")
+    ax.axis("equal")
+
 def extract_lines_parameterized(pc, idx_skip=2, window_size=4, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
                                 min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.20, 
@@ -731,6 +736,8 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
         # This if just for plotting, same info but in radians instead of (x,y) pont of circle
         deg_ang = np.degrees(np.arctan2(ang_vec_norm[:, 1], ang_vec_norm[:, 0]))
+        deg_ang_cluster = np.degrees(np.arctan2(line_vec_norm_cluster[:, 1], line_vec_norm_cluster[:, 0]))
+        print(deg_ang_cluster)
         # deg_ang = deg_ang + 90
         # mask = deg_ang < 0
         # deg_ang[mask] += 360.0
@@ -743,8 +750,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
         fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
         ax[0,0].scatter(pc[:, 0], pc[:, 1])
-        ax[0,0].set_xlabel("X (m)")
-        ax[0,0].set_ylabel("Y (m)")
+        set_up_axes(ax[0,0])
         ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], color=colors_lines)
 
 
@@ -756,6 +762,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
         ax[0, 1].set_xlim(*(ax[0,0].get_xlim()))
         ax[0, 1].set_ylim(*(ax[0,0].get_ylim()))
+        set_up_axes(ax[0,1])
 
 
         # Plot Line Models in Parameter Space
@@ -766,8 +773,8 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # ax_polar.set_xlim(0, np.pi)
         # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
         ax[0,2].set_xlim(-1.175, 1.175)
-        ax[0,2].set_xlabel("Angles (deg)")
-        ax[0,2].set_ylabel("Origin Offset (m)")
+        ax[0,2].set_xlabel(r"Angles (deg)")
+        ax[0,2].set_ylabel(r"Origin Offset (m)")
 
     
         # Plot the Line Models as "points" in Cartesian Space (Euclidean Space)
@@ -775,16 +782,14 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters])
         # t = np.linspace(0,np.pi,100)
         # ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
-        ax[1,0].set_xlabel("X (m)")
-        ax[1,0].set_ylabel("Y (m)")
-        ax[1,0].axis("equal")
+        set_up_axes(ax[1,0])
 
         ax[1,1].scatter(pc[:, 0], pc[:, 1])
         plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx) +1])
-        ax[1,1].set_xlabel("X (m)")
-        ax[1,1].set_ylabel("Y (m)")
+        set_up_axes(ax[1,1])
 
         ax[1, 2].scatter(pc[:, 0], pc[:, 1])
+        set_up_axes(ax[1, 2])
 
 
         plt.subplots_adjust(left=.124, bottom=.107, right=None, top=None, wspace=.267, hspace=.212)
