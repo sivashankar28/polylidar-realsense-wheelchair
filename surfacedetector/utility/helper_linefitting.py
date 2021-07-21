@@ -555,7 +555,7 @@ def average_clusters(points, clusters, min_num_models=3):
         if points.shape[0] >= min_num_models:
             avg_point = np.average(points, axis=0)
             clusters_averaged.append(avg_point)
-            cluster_idx.append(clust_idx)
+            cluster_idx.append(clust_idx + 1)
 
     clusters_filtered = np.array(clusters_averaged)
     return clusters_filtered, cluster_idx
@@ -567,7 +567,7 @@ def cluster_lines(points, cluster_kwargs=dict(t=0.10, criterion='distance')):
     return clusters
 
 
-def create_line_model(line_point, line_vec, points, max_slope=2.0):
+def create_line_model(line_point, line_vec, points, cluster_idx, max_slope=2.0):
     flip_axis = False
     x_points = points[:, 0]
     y_points = points[:, 1]
@@ -582,7 +582,7 @@ def create_line_model(line_point, line_vec, points, max_slope=2.0):
     coef = [m, b]
 
     poly1d_fn = np.poly1d(coef)
-    res = dict(points=points, x_points=x_points, y_points=y_points, fn=poly1d_fn,
+    res = dict(points=points, x_points=x_points, y_points=y_points, fn=poly1d_fn, cluster_idx=cluster_idx,
             dir_vec=line_vec, line_point=line_point, flip_axis=flip_axis, points_2d_orig=points, rmse=0.0)
 
     return res
@@ -652,6 +652,122 @@ def set_up_axes(ax):
     ax.set_xlabel(r"X (m)")
     ax.set_ylabel(r"Y (m)")
     ax.axis("equal")
+
+def bounding_elipse(x, y, ax, n_std=4, facecolor='none', **kwargs):
+    """
+    Create a plot of the covariance confidence ellipse of `x` and `y`
+
+    Parameters
+    ----------
+    x, y : array_like, shape (n, )
+        Input data.
+
+    ax : matplotlib.axes.Axes
+        The axes object to draw the ellipse into.
+
+
+    Returns
+    -------
+    matplotlib.patches.Ellipse
+
+    Other parameters
+    ----------------
+    kwargs : `~matplotlib.patches.Patch` properties
+    """
+    if x.size != y.size:
+        raise ValueError("x and y must be the same size")
+
+    from matplotlib.patches import Ellipse
+    import matplotlib.transforms as transforms
+
+    width = np.ptp(x) * n_std
+    height = np.ptp(y) * n_std
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+    ellipse = Ellipse((x_mean, y_mean),
+        width=width,
+        height=height,
+        facecolor=facecolor,
+        **kwargs)
+
+    return ax.add_patch(ellipse)
+
+def confidence_ellipse(x, y, ax, n_std=3.0, facecolor='none', **kwargs):
+    """
+    Create a plot of the covariance confidence ellipse of `x` and `y`
+
+    Parameters
+    ----------
+    x, y : array_like, shape (n, )
+        Input data.
+
+    ax : matplotlib.axes.Axes
+        The axes object to draw the ellipse into.
+
+    n_std : float
+        The number of standard deviations to determine the ellipse's radiuses.
+
+    Returns
+    -------
+    matplotlib.patches.Ellipse
+
+    Other parameters
+    ----------------
+    kwargs : `~matplotlib.patches.Patch` properties
+    """
+    if x.size != y.size:
+        raise ValueError("x and y must be the same size")
+
+    from matplotlib.patches import Ellipse
+    import matplotlib.transforms as transforms
+    cov = np.cov(x, y)
+    pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+    # Using a special case to obtain the eigenvalues of this
+    # two-dimensionl dataset.
+    ell_radius_x = np.sqrt(1 + pearson)
+    ell_radius_y = np.sqrt(1 - pearson)
+
+    width = np.ptp(x) * 2
+    height = np.ptp(y) * 2
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+
+    width = ell_radius_x * 2
+    height = ell_radius_y * 2
+
+    ellipse = Ellipse((0, 0),
+        width=width,
+        height=height,
+        facecolor=facecolor,
+        **kwargs)
+
+    # Calculating the stdandard deviation of x from
+    # the squareroot of the variance and multiplying
+    # with the given number of standard deviations.
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    mean_x = np.mean(x)
+
+    # calculating the stdandard deviation of y ...
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    mean_y = np.mean(y)
+
+    scale_x = np.max([0.15, scale_x])
+    scale_y = np.max([0.15, scale_y])
+    # if scale_x > 2 * scale_y:
+    #     scale_y = scale_x / 2.0
+    # if scale_y > 2 * scale_x:
+    #     scale_x = scale_y / 2.0
+
+    print(ell_radius_x, ell_radius_y)
+    print(scale_x, scale_y)
+
+    transf = transforms.Affine2D() \
+        .rotate_deg(45) \
+        .scale(scale_x, scale_y) \
+        .translate(mean_x, mean_y)
+
+    ellipse.set_transform(transf + ax.transData)
+    return ax.add_patch(ellipse)
 
 def extract_lines_parameterized(pc, idx_skip=2, window_size=4, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
@@ -729,7 +845,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     line_vec_norm_cluster = np.matmul(ang_vec_norm_cluster, rot)
 
     # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
-    line_models = [create_line_model(cluster_average[i,:], line_vec_norm_cluster[i, :], pc) for i in range(cluster_average.shape[0])]
+    line_models = [create_line_model(cluster_average[i,:], line_vec_norm_cluster[i, :], pc, cluster_idx[i]) for i in range(cluster_average.shape[0])]
     line_models_filtered = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
 
     if debug:
@@ -745,13 +861,14 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         parameter_set = np.column_stack((deg_ang, origin_offset))
 
         # Idea, map each proposed line as a new color, colored by index
-        cmap_viridis = matplotlib.cm.get_cmap('Spectral')
+        cmap_viridis = matplotlib.cm.get_cmap('turbo')
         colors_lines = np.array(cmap_viridis([i/mid_point.shape[0] for i in range(mid_point.shape[0])]))
 
         fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
-        ax[0,0].scatter(pc[:, 0], pc[:, 1])
+        ax[0,0].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
         set_up_axes(ax[0,0])
-        ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], color=colors_lines)
+        ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], 
+                        color=colors_lines, edgecolor='k', width=0.01, linewidth=1)
 
 
         for i in range(mid_point.shape[0]):
@@ -760,16 +877,16 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
             end_point = start_point + line_vec * 1.0
             ax[0, 1].axline(start_point, xy2=end_point, c=colors_lines[i, :])
 
+        set_up_axes(ax[0,1])
         ax[0, 1].set_xlim(*(ax[0,0].get_xlim()))
         ax[0, 1].set_ylim(*(ax[0,0].get_ylim()))
-        set_up_axes(ax[0,1])
 
 
         # Plot Line Models in Parameter Space
         # polar_r = np.linalg.norm(condensed_param_set, axis=1)
         ax[0,2].remove()
         ax_polar = fig.add_subplot(2, 3, 3, projection='polar')
-        ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines)
+        ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines, ec='k')
         # ax_polar.set_xlim(0, np.pi)
         # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
         ax[0,2].set_xlim(-1.175, 1.175)
@@ -778,17 +895,35 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
     
         # Plot the Line Models as "points" in Cartesian Space (Euclidean Space)
+        # Clusters are denoted by the marker shape
+        # Color is still based upon the original line model.
         tab10_colors = np.array(plt.cm.get_cmap('tab20').colors)
-        ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters])
-        # t = np.linspace(0,np.pi,100)
-        # ax[1,0].plot(np.cos(t), np.sin(t), linewidth=1)
+        markers = ['o', 'v', '^', '<', '>', 's', 'p', 'P', '*', "X", "D", "d", "|", "_"]
+        cluster_nums = np.unique(clusters)
+        for i, cluster_num in enumerate(cluster_nums):
+            mask = clusters == cluster_num
+            marker = markers[i]
+            colors = colors_lines[mask, :]
+            ax[1,0].scatter(condensed_param_set[mask,0], condensed_param_set[mask,1], c=colors, ec='k', marker=marker)
+
+        # Draw Ovals for the averaged clusters
+        averaged_cluster_colors = dict()
+        for cluster_num in cluster_idx:
+            mask = clusters == cluster_num
+            data = condensed_param_set[mask, :]
+            average_color = np.mean(colors_lines[mask, :], axis=0)
+            averaged_cluster_colors[cluster_num] = average_color
+            # bounding_elipse(data[:, 0], data[:, 1], ax[1,0], n_std=3.5, edgecolor='red')
+            confidence_ellipse(data[:, 0], data[:, 1], ax[1,0], n_std=3, edgecolor='red')
+        # ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters], ec='k')
         set_up_axes(ax[1,0])
 
-        ax[1,1].scatter(pc[:, 0], pc[:, 1])
-        plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx) +1])
+        ax[1,1].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
+        plot_fit_lines(ax[1,1], line_models_filtered, colors=averaged_cluster_colors)
+        # plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx)])
         set_up_axes(ax[1,1])
 
-        ax[1, 2].scatter(pc[:, 0], pc[:, 1])
+        ax[1, 2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
         set_up_axes(ax[1, 2])
 
 
