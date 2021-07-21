@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 import logging
 import time
@@ -21,6 +22,7 @@ from surfacedetector.utility.helper import plot_points as plot_points_cv2, plot_
 
 from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever, transform_points
 from scripts.o3d_util import create_point
+from surfacedetector.utility.AngleAnnotation import AngleAnnotation
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,6 +48,98 @@ ToGLCamera = np.array([
 ])
 FromGLGamera = np.linalg.inv(ToGLCamera)
 
+
+def create_transform(translate=[0.0, 0.0], rot=45, deg=True):
+    transform = np.eye(3)
+    rad = np.radians(rot) if deg else rot
+    rm = np.array([
+        [np.cos(rad), -np.sin(rad)],
+        [np.sin(rad), np.cos(rad)]
+    ])
+
+    transform[:2,:2] = rm
+    transform[:2, 2] = translate
+    return transform
+
+def draw_brace_updated(ax, p1, p2, text, rotation=0):
+    """Draws an annotated brace on the axes."""
+    ax.autoscale(False)
+
+    p1 = np.array(p1)
+    p2 = np.array(p2)
+    # Get Direction vector of two points
+    vec = np.array([p2[0] - p1[1], p2[1]- p1[1]])
+    # Get brace length
+    brace_length = np.linalg.norm(vec)
+    # normalize vec
+    vec = vec / brace_length
+    
+    # Get angle of rotation
+    dot = 1.0 * vec[0]
+    det = 1.0 * vec[1]
+    rotation = np.degrees(np.arctan2(det, dot))
+
+    # Get the mean point, set height level
+    mean_point = (p1 + p2) / 2.0
+    yy = mean_point[1]
+
+    # calculate how much the non-roated brace has to expand
+    # such that it spans the correct length once rotated
+    x_shrink = np.cos(np.radians(rotation))
+    x_scale = (1.0 / x_shrink) * .90
+    brace_length_flat = brace_length * x_scale
+    to_add = (brace_length_flat - brace_length) / 2.0
+    xmin, xmax = p1[0] -to_add, p2[0] + to_add
+
+
+    xspan = xmax - xmin
+    ax_xmin, ax_xmax = ax.get_xlim()
+    xax_span = ax_xmax - ax_xmin
+
+    ymin, ymax = ax.get_ylim()
+    yspan = ymax - ymin
+    resolution = int(xspan/xax_span*100)*2+1 # guaranteed uneven
+    beta = 300./xax_span # the higher this is, the smaller the radius
+
+    x = np.linspace(xmin, xmax, resolution)
+    x_half = x[:int(resolution/2)+1]
+    y_half_brace = (1/(1.+np.exp(-beta*(x_half-x_half[0])))
+                    + 1/(1.+np.exp(-beta*(x_half-x_half[-1]))))
+    y = np.concatenate((y_half_brace, y_half_brace[-2::-1]))
+    y = yy + (.05*y - .01)*yspan # adjust vertical position
+
+    p_idx_text = np.argmax(y)
+    # print(p_idx_text)
+    # print(x[p_idx_text], y[p_idx_text])
+
+    x_min = np.mean(x)
+    y_min = np.min(y)
+    y_max = np.max(y)
+    # print(xspan, yy)
+    # print(x_min, y_min)
+
+    center = [x_min, y_min]
+
+    points = np.column_stack([x, y])
+    points_1 = np.ones((3, points.shape[0]))
+    points_1[:2,:] = (points - center).T
+
+    rm = create_transform(translate=center, rot=rotation)
+    points_rot = rm @ points_1
+    x = points_rot[0, :]
+    y = points_rot[1, :]
+
+    text_center = points_rot[:2, p_idx_text].T
+
+    dir_vec = (rm @ [[0], [1.0], [1.0]])[:2, 0].T
+    # print(dir_vec)
+    # print(text_center)
+
+    alpha = (y_max - y_min) / 2.0
+    text_center = text_center + dir_vec * alpha
+
+    ax.plot(x, y, color='black', lw=1)
+    ax.text(text_center[0], text_center[1], text, ha='center', va='center', rotation=rotation)
 
 # def create_grid()
 def grid(size=10, n=10, color=[0.5, 0.5, 0.5], plane='xy', plane_offset=0, translate=[0, 0, 0]):
@@ -174,7 +268,7 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
     if use_standard_vis:
         vis = o3d.visualization.O3DVisualizer("Wheel Chair Curb Mounting Visualization", 1024, 768)
         gui.Application.instance.add_window(vis)
-        vis.show_settings = True
+        vis.show_settings = False
         o3d_scene = vis
         o3d_top_scene = vis
         o3d_low_scene = vis.scene
@@ -286,18 +380,63 @@ def plot_fit_lines(ax, fit_lines, annotate=True):
         if annotate:
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
 
-def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
-    # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
-    #     top_points, top_normal, min_points_line)
-    fig, ax = setup_figure_2d()
-    plot_points(ax[0], top_points_raw)
-    plot_points(ax[1], top_points_2d)
-    for i in range(top_points_2d.shape[0]):
-        ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
-    plot_fit_lines(ax[1], all_fit_lines, annotate=False)
-    plot_fit_lines(ax[2], best_fit_lines)
+# def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
+#     # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
+#     #     top_points, top_normal, min_points_line)
+#     fig, ax = setup_figure_2d()
+#     plot_points(ax[0], top_points_raw)
+#     plot_points(ax[1], top_points_2d)
+#     for i in range(top_points_2d.shape[0]):
+#         ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
+#     plot_fit_lines(ax[1], all_fit_lines, annotate=False)
+#     plot_fit_lines(ax[2], best_fit_lines)
 
+#     plt.show()
+
+def demonstrate_lines():
+    x = np.array([0, 0.25, 0.5, 0.75, 1.0])
+    y = np.array([1.0, 0.75, 0.5, 0.25, 0.0])
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
+
+    dir_vec = np.array([x[-1]- x[0], y[-1] - y[0]])
+    dir_vec = dir_vec / np.linalg.norm(dir_vec)
+
+
+    scatter_hdl = ax.scatter(x, y, color=TABLEAU_COLORS['tab:blue'], zorder=2)
+    line_hdl = ax.plot(x, y, color=TABLEAU_COLORS['tab:orange'], zorder=1)[0]
+    arrow_hdl = ax.arrow(0.0, 0.0, 0.5, 0.5, color=TABLEAU_COLORS['tab:green'], head_width=0.05,  width=0.01, \
+                length_includes_head=True)
+
+
+    AngleAnnotation((0.0, 0.0), [1, 0], [0.5, 0.5],ax=ax, fig=fig, size=220, text=r'$45^{\circ}$', textposition='inside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
+    ax.annotate(r"$y = -1.0 x + 1.0$", (0.50, 0.55))
+
+    draw_brace_updated(ax, (0.0,0.0), (0.5, 0.5), "offset")
+    ax.set_xlabel("X (m)")
+    ax.set_xlabel("Y (m)")
+
+
+    import matplotlib.patches as mpatches
+    from matplotlib.legend_handler import HandlerPatch
+    def make_legend_arrow(legend, orig_handle,
+                        xdescent, ydescent,
+                        width, height, fontsize):
+        p = mpatches.FancyArrow(0, 0.5*height, width, 0, length_includes_head=True, head_width=0.75*height )
+        return p
+    # Platform normal vector
+    plt.legend([scatter_hdl, line_hdl, arrow_hdl], 
+            [r'Raw Data',
+             r'Fit Line, $y=mx+b$',
+             r'Angle/Offset',
+             ], loc='upper right', fontsize=10,
+             handler_map={mpatches.FancyArrow : HandlerPatch(patch_func=make_legend_arrow),
+                    })
+
+
+    fig.savefig('assets/pics/line_representations.png', bbox_inches='tight')
     plt.show()
+    
 
 def process(data, fname='planes_R_r45_1.5_0001'):
     """ Process the bottom and top planes dictionary """
@@ -374,6 +513,7 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
+    demonstrate_lines()
     if args.file is None:
         files = get_files()
         all_time = []

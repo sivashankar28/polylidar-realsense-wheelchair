@@ -94,3 +94,12 @@ Uses solid state lidar technology.
 0. `python -m surfacedetector.curblinedetection -c surfacedetector/config/d455.yaml`
 1. `python -m scripts.paper.make_figures --file data/scratch_test/planes_R_R45D_1.5_0001.joblib`
 
+
+### Errors 
+
+**Windows error code: 2000. (null)**
+
+You get this error from Open3D if your graphics driver is not running OpenGL code [correctly](https://github.com/intel-isl/Open3D/issues/3317). Make sure you update graphics or force the python program to use Nvidia Graphics. 
+
+![Use NVIDIA](assets/media/graphics_nvidia.PNG)
+

@@ -72,6 +72,13 @@ def setup_figure_2d():
         ax_.axis('equal')
     return fig, ax
 
+
+def get_angle(vec):
+    dot = 1.0 * vec[0]
+    det = 1.0 * vec[1]
+    rotation = np.degrees(np.arctan2(det, dot))
+    return rotation
+
 def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
     next(ax._get_lines.prop_cycler)
     for i, fit_line in enumerate(fit_lines):
@@ -87,7 +94,9 @@ def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
             ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-', c=color)
         mean = fit_line['points'].mean(axis=0)
         if annotate:
-            ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
+            ang = get_angle(fit_line['dir_vec'])
+            # print(fit_line['dir_vec'])
+            ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]), rotation=ang, ha='center', va='center', )
 
 def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
     # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(

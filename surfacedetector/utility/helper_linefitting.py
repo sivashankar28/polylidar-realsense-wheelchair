@@ -33,12 +33,39 @@ from scipy.spatial.transform import Rotation as R
 from simplifyline import MatrixDouble, simplify_radial_dist_3d
 from surfacedetector.utility.helper_general import rotate_data_planar, normalized
 import matplotlib.pyplot as plt
+import matplotlib
 from pprint import pprint
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points
 from surfacedetector.utility.AngleAnnotation import AngleAnnotation
 
+from matplotlib.transforms import Bbox
+from matplotlib import colors as mcolors
+TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
+
+def full_extent(ax, fig, pad=0.0):
+    """Get the full extent of an axes, including axes labels, tick labels, and
+    titles."""
+    # For text objects, we need to draw the figure first, otherwise the extents
+    # are undefined.
+    fig.canvas.draw()
+    items = ax.get_xticklabels() + ax.get_yticklabels() 
+#    items += [ax, ax.title, ax.xaxis.label, ax.yaxis.label]
+    items += [ax, ax.title]
+    items += [ax.get_xaxis().get_label(), ax.get_yaxis().get_label()]
+    bbox = Bbox.union([item.get_window_extent() for item in items])
+
+    return bbox.expanded(1.0 + pad, 1.0 + pad)
+
+
+def pad_extent(ax, main_extent, pad=0.0):
+    items = [ax, ax.title]
+    items += [ax.get_xaxis().get_label(), ax.get_yaxis().get_label()]
+    item_extents = [item.get_window_extent() for item in items]
+    # item_extents.append(main_extent)
+    bbox = Bbox.union(item_extents)
+    return bbox.expanded(1.0 + pad, 1.0 + pad)
 
 def choose_plane(first_plane, second_plane):
     first_centroid = first_plane['point']
@@ -601,6 +628,22 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         line['points'] = points_
         line['rmse'] = np.sqrt(np.sum((inlier_abs_dev **2)) / inlier_abs_dev.shape[0])
 
+        # TODO dir_vec should be updated
+        y_points = poly1d_fn(x_points)
+        p1 = np.array([x_points[0], y_points[0]])
+        p2 = np.array([x_points[-1], y_points[-1]])
+
+        dir_vec = (p2 - p1)
+        dir_vec = dir_vec / np.linalg.norm(dir_vec)
+
+        # print("Original ", line['dir_vec'])
+        if line['flip_axis']:
+            dir_vec = np.arrray([dir_vec[1], dir_vec[0]])
+        if dir_vec[0] < 0:
+            dir_vec *= -1.0
+        # print("Refit ", dir_vec)
+        line['dir_vec'] = dir_vec
+
         filtered_line_models.append(line)
     return filtered_line_models
 
@@ -608,7 +651,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
 def extract_lines_parameterized(pc, idx_skip=2, window_size=4, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
                                 min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.20, 
-                                debug=False, **kwargs):
+                                debug=False, max_origin_offset=2.5, min_origin_offset=0.5, **kwargs):
     """Extract possible lines within line segment point cloud
     0. Dowsample point cloud segment by skipping over points with by index (idx_skip)
     1. Create vectors for each line segment. These vectors are simple proposed line models!
@@ -658,9 +701,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     t4 = time.perf_counter()
     # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
     # Scale origin offset such that angles the average offset is 1 meters.
-    avg_offset = np.mean(origin_offset)
-    offset_add = max(-0.10, (1.0 -avg_offset))
-    origin_offset_scaled = offset_add + origin_offset
+    origin_offset_scaled = np.clip(origin_offset, min_origin_offset, max_origin_offset)
     condensed_param_set = ang_vec_norm * origin_offset_scaled[:, np.newaxis] # used for clustering
     condensed_param_set_true = ang_vec_norm * origin_offset[:, np.newaxis] # true parametrization of line angle and origin offset
 
@@ -696,22 +737,37 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # deg_ang = np.unwrap(deg_ang)
         parameter_set = np.column_stack((deg_ang, origin_offset))
 
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
+        # Idea, map each proposed line as a new color, colored by index
+        cmap_viridis = matplotlib.cm.get_cmap('Spectral')
+        colors_lines = np.array(cmap_viridis([i/mid_point.shape[0] for i in range(mid_point.shape[0])]))
+
+        fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
         ax[0,0].scatter(pc[:, 0], pc[:, 1])
         ax[0,0].set_xlabel("X (m)")
         ax[0,0].set_ylabel("Y (m)")
-        ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], color='r')
+        ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], color=colors_lines)
+
+
+        for i in range(mid_point.shape[0]):
+            start_point = mid_point[i, :]
+            line_vec = line_vec_norm_orig[i, :]
+            end_point = start_point + line_vec * 1.0
+            ax[0, 1].axline(start_point, xy2=end_point, c=colors_lines[i, :])
+
+        ax[0, 1].set_xlim(*(ax[0,0].get_xlim()))
+        ax[0, 1].set_ylim(*(ax[0,0].get_ylim()))
 
 
         # Plot Line Models in Parameter Space
-        polar_r = np.linalg.norm(condensed_param_set, axis=1)
-        ax[0,1].remove()
-        ax_polar = fig.add_subplot(2, 2, 2, projection='polar')
-        ax_polar.scatter(np.radians(deg_ang), polar_r)
+        # polar_r = np.linalg.norm(condensed_param_set, axis=1)
+        ax[0,2].remove()
+        ax_polar = fig.add_subplot(2, 3, 3, projection='polar')
+        ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines)
         # ax_polar.set_xlim(0, np.pi)
         # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
-        ax[0,1].set_xlabel("Angles (deg)")
-        ax[0,1].set_ylabel("Origin Offset (m)")
+        ax[0,2].set_xlim(-1.175, 1.175)
+        ax[0,2].set_xlabel("Angles (deg)")
+        ax[0,2].set_ylabel("Origin Offset (m)")
 
     
         # Plot the Line Models as "points" in Cartesian Space (Euclidean Space)
@@ -728,7 +784,21 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         ax[1,1].set_xlabel("X (m)")
         ax[1,1].set_ylabel("Y (m)")
 
+        ax[1, 2].scatter(pc[:, 0], pc[:, 1])
+
+
+        plt.subplots_adjust(left=.124, bottom=.107, right=None, top=None, wspace=.267, hspace=.212)
         fig.savefig('assets/pics/lines_string_vectors.png', bbox_inches='tight')
+
+        # Print *individual* images if needed
+        for i, row in enumerate(ax):
+            for j, ax_ in enumerate(row):
+                if i == 0 and j == 2:
+                    ax_ = ax_polar
+                extent = ax_.get_tightbbox(fig.canvas.renderer).transformed(fig.dpi_scale_trans.inverted())
+                pad = 0.05
+                extent = extent.expanded(1.0 + pad, 1.0 + pad)
+                fig.savefig(f'assets/pics/line_models_ax_{i}_{j}.png', bbox_inches=extent)
         
         plt.show()
 
@@ -911,7 +981,7 @@ def plot_maneuver(result, best_fit_line):
     ax.text(platform_poi_pos_wheel_chair[0] - 0.18, platform_poi_pos_wheel_chair[1]-0.01, 'POI', zorder=5)
     # Plot Wheel chair origin
     ax.scatter(0, 0, c='k', zorder=4)
-    ax.text(0.05, -0.05, 'Wheel Chair Origin')
+    ax.text(0.05, -0.05, 'Wheelchair Origin')
 
     # Plot Platform Normal (red)
     platform_normal = -0.62 *result['platform_normal_inverted_unit']
