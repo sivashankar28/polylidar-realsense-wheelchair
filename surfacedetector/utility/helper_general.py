@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import warnings
+from scipy.spatial import ConvexHull
 
 def create_transform(translate=[0.0, 0.0], rot=45, deg=True):
     transform = np.eye(3)
@@ -206,3 +207,119 @@ def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
     plot_fit_lines(ax[1], all_fit_lines, annotate=False)
     plot_fit_lines(ax[2], best_fit_lines)
     plt.show()
+
+
+def bounding_elipse(points, ax, n_std=1.1, facecolor='none', **kwargs):
+    """
+    Create a plot of the covariance confidence ellipse of `x` and `y`
+
+    Parameters
+    ----------
+    x, y : array_like, shape (n, )
+        Input data.
+
+    ax : matplotlib.axes.Axes
+        The axes object to draw the ellipse into.
+
+
+    Returns
+    -------
+    matplotlib.patches.Ellipse
+
+    Other parameters
+    ----------------
+    kwargs : `~matplotlib.patches.Patch` properties
+    """
+
+    from matplotlib.patches import Ellipse
+    import matplotlib.transforms as transforms
+    from surfacedetector.utility.helper_general import minimum_bounding_rectangle
+    _, meta = minimum_bounding_rectangle(points)
+    # width = meta['width']
+    # height = meta['height']
+    angle = np.degrees(meta['angle'])
+    width = np.ptp(points[:, 0]) * n_std
+    height = np.ptp(points[:, 1]) * n_std
+
+    x_mean = (np.min(points[:, 0]) + np.max(points[:, 0])) / 2.0
+    y_mean = (np.min(points[:, 1]) + np.max(points[:, 1])) / 2.0
+    width = np.max([0.25, width])
+    height = np.max([0.25, height])
+    
+    ellipse = Ellipse((x_mean, y_mean),
+        width=width,
+        height=height,
+        angle=angle,
+        facecolor=facecolor,
+        **kwargs)
+
+    return ax.add_patch(ellipse)
+
+def minimum_bounding_rectangle(points):
+    """
+    Find the smallest bounding rectangle for a set of points.
+    Returns a set of points representing the corners of the bounding box.
+
+    :param points: an nx2 matrix of coordinates
+    :rval: an nx2 matrix of coordinates
+    """
+    from scipy.ndimage.interpolation import rotate
+    pi2 = np.pi/2.
+
+    # get the convex hull for the points
+    hull_points = points[ConvexHull(points).vertices]
+
+    # calculate edge angles
+    edges = np.zeros((len(hull_points)-1, 2))
+    edges = hull_points[1:] - hull_points[:-1]
+
+    angles = np.zeros((len(edges)))
+    angles = np.arctan2(edges[:, 1], edges[:, 0])
+
+    angles = np.abs(np.mod(angles, pi2))
+    angles = np.unique(angles)
+
+    # find rotation matrices
+    # XXX both work
+    rotations = np.vstack([
+        np.cos(angles),
+        np.cos(angles-pi2),
+        np.cos(angles+pi2),
+        np.cos(angles)]).T
+#     rotations = np.vstack([
+#         np.cos(angles),
+#         -np.sin(angles),
+#         np.sin(angles),
+#         np.cos(angles)]).T
+    rotations = rotations.reshape((-1, 2, 2))
+
+    # apply rotations to the hull
+    rot_points = np.dot(rotations, hull_points.T)
+
+    # find the bounding points
+    min_x = np.nanmin(rot_points[:, 0], axis=1)
+    max_x = np.nanmax(rot_points[:, 0], axis=1)
+    min_y = np.nanmin(rot_points[:, 1], axis=1)
+    max_y = np.nanmax(rot_points[:, 1], axis=1)
+
+    # find the box with the best area
+    areas = (max_x - min_x) * (max_y - min_y)
+    best_idx = np.argmin(areas)
+
+    # return the best box
+    x1 = max_x[best_idx]
+    x2 = min_x[best_idx]
+    y1 = max_y[best_idx]
+    y2 = min_y[best_idx]
+    r = rotations[best_idx]
+    radians = angles[best_idx]
+
+    rval = np.zeros((4, 2))
+    rval[0] = np.dot([x1, y2], r)
+    rval[1] = np.dot([x2, y2], r)
+    rval[2] = np.dot([x2, y1], r)
+    rval[3] = np.dot([x1, y1], r)
+
+    meta = dict(height=y2-y1, width=x2-x1, angle=radians)
+
+    return rval, meta
