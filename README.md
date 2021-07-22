@@ -92,7 +92,7 @@ Uses solid state lidar technology.
 ## Scripts for Figures
 
 0. `python -m surfacedetector.curblinedetection -c surfacedetector/config/d455.yaml`
-1. `python -m scripts.paper.make_figures --file data/scratch_test/planes_R_R45D_1.5_0001.joblib`
+1. `python -m scripts.paper.make_figures --file data/planes_R_R45D_1.5_0001.joblib`
 
 
 ### Errors 
