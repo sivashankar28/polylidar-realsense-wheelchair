@@ -175,7 +175,7 @@ def create_arrow(o3d_scene, dir_vec, position, length, material=None, label="Dir
 def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None, fit_line=None, result=None,
                 first_points_label="Top Plane", second_points_label="Bottom Plane", filtered_points_label="Filtered Points",
                 sensor_to_wheel_chair_transform=None,
-                color_image=None, depth_image=None):
+                color_image=None, depth_image=None, fname='curb_polyons.png'):
 
     gui.Application.instance.initialize()
     use_standard_vis=True
@@ -277,7 +277,7 @@ def visualize_3d(first_points_rot, second_points_rot=None, filtered_points=None,
     except Exception as e:
         print("Error:", e)
 
-    # import pdb; pdb.set_trace()
+    vis.export_current_image(f'assets/pics/{fname}')
     gui.Application.instance.run()
 
 
@@ -348,6 +348,7 @@ def demonstrate_lines():
     ax.set_xlim(-0.05, 1.05)
     ax.axis('equal')
     fig.savefig('assets/pics/line_representations.png', bbox_inches='tight')
+    fig.savefig('assets/pics/line_representations.pdf', bbox_inches='tight')
     plt.show()
     
 
@@ -386,7 +387,7 @@ def process(data, fname='planes_R_r45_1.5_0001'):
     print("Visualize 3D Data")
     visualize_3d(top_points, bottom_points, filtered_top_points,
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
-                color_image=color_image, depth_image=depth_image)
+                color_image=color_image, depth_image=depth_image, fname='curb_polygons_3d.png')
 
     best_fit_lines = extract_lines_wrapper_new(
         filtered_top_points, top_normal, wheel_chair_direction_vec_sensor_frame=[0, 1, 0], debug=True, curb_height=data['curb_height'])  # ~2ms
@@ -399,11 +400,13 @@ def process(data, fname='planes_R_r45_1.5_0001'):
 
     visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0], result=result,
                 sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform, 
-                color_image=color_image, depth_image=depth_image)
+                color_image=color_image, depth_image=depth_image, fname='curb_turning_3d.png')
 
     square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
     plot_planes_and_obstacles(planes[:1], obstacles, proj_mat, None, color_image, config)
-    cv2.imwrite(f"./assets/pics/{fname}_poly.png",color_image)
+    cv2.imwrite(f"./assets/pics/{fname}_poly_1.png",color_image)
+    plot_planes_and_obstacles(planes[:2], obstacles, proj_mat, None, color_image, config)
+    cv2.imwrite(f"./assets/pics/{fname}_poly_2.png",color_image)
     plot_points_cv2(square_points_sensor_frame, proj_mat, color_image, config, color=(0, 0, 225), thickness=3)
     cv2.imwrite(f"./assets/pics/{fname}_curb_estimate_with_poly.png",color_image)
 

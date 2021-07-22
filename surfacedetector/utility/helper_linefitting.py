@@ -746,42 +746,34 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
         # This if just for plotting, same info but in radians instead of (x,y) pont of circle
         deg_ang = np.degrees(np.arctan2(ang_vec_norm[:, 1], ang_vec_norm[:, 0]))
-        deg_ang_cluster = np.degrees(np.arctan2(line_vec_norm_cluster[:, 1], line_vec_norm_cluster[:, 0]))
-        # deg_ang = deg_ang + 90
-        # mask = deg_ang < 0
-        # deg_ang[mask] += 360.0
-        # deg_ang = np.unwrap(deg_ang)
-        parameter_set = np.column_stack((deg_ang, origin_offset))
-
         # Idea, map each proposed line as a new color, colored by index
         cmap_viridis = matplotlib.cm.get_cmap('turbo')
         colors_lines = np.array(cmap_viridis([i/mid_point.shape[0] for i in range(mid_point.shape[0])]))
 
         fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
+
+        # Plot the Polygon Points and Smoothed Line Vectors
         ax[0,0].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'], ec='k')
         set_up_axes(ax[0,0])
         ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], 
                         color=colors_lines, edgecolor='k', width=0.01, minlength=2, linewidth=1)
 
 
+        # Plot the line (y=mx+b) representation for each Line Vector
         for i in range(mid_point.shape[0]):
             start_point = mid_point[i, :]
             line_vec = line_vec_norm_orig[i, :]
             end_point = start_point + line_vec * 1.0
             ax[0, 1].axline(start_point, xy2=end_point, c=colors_lines[i, :])
-
         set_up_axes(ax[0,1])
         ax[0, 1].set_xlim(*(ax[0,0].get_xlim()))
         ax[0, 1].set_ylim(*(ax[0,0].get_ylim()))
 
 
-        # Plot Line Models in Parameter Space
-        # polar_r = np.linalg.norm(condensed_param_set, axis=1)
+        # Plot Line Models in Parameter Space (polar coordinates)
         ax[0,2].remove()
         ax_polar = fig.add_subplot(2, 3, 3, projection='polar')
         ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines, ec='k', zorder=10)
-        # ax_polar.set_xlim(0, np.pi)
-        # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
         ax[0,2].set_xlim(-1.175, 1.175)
         ax[0,2].set_xlabel(r"Angles (deg)")
         ax[0,2].set_ylabel(r"Origin Offset (m)")
@@ -807,10 +799,9 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
             average_color = np.mean(colors_lines[mask, :], axis=0)
             averaged_cluster_colors[cluster_num] = average_color
             _, meta = bounding_elipse(data, ax[1,0], n_std=1.4, edgecolor='red')
-            text_point = np.array([meta['x'], meta['y']]) + np.array([meta['width']/2.0, meta['height']/1.5]) 
-            ax[1,0].annotate(f"{i+1}", text_point, va='center', ha='center')
+            text_point = np.array([meta['x'], meta['y']]) + np.array([0.0, meta['height']/1.3]) 
+            ax[1,0].annotate(f"CL{i+1}", text_point, va='center', ha='center')
 
-            # confidence_ellipse(data[:, 0], data[:, 1], ax[1,0], n_std=3, edgecolor='red')
         # ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters], ec='k')
         set_up_axes(ax[1,0])
 
@@ -823,8 +814,11 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         inlier_mask = line_model['inlier_mask']
         point_colors_alpha = np.ones((all_points.shape[0], 4))
         point_colors_alpha[:, :] = TABLEAU_COLORS['tab:gray']
-        point_colors_alpha[~inlier_mask] = low_alpha
-        ax[1, 1].scatter(pc[:, 0], pc[:, 1], c=point_colors_alpha, s=35)
+        point_colors_alpha[~inlier_mask, 3] = low_alpha
+        edge_colors_alpha = np.ones((all_points.shape[0], 4), dtype=float)
+        edge_colors_alpha[:, :3] = [0.0, 0.0, 0.0]
+        edge_colors_alpha[~inlier_mask, 3] = low_alpha
+        ax[1, 1].scatter(pc[:, 0], pc[:, 1], c=point_colors_alpha, s=35, ec=edge_colors_alpha)
         for i in range(all_points.shape[0]):
             point = all_points[i, :]
             new_point = point + ortho_dir_dist[i, :]
@@ -844,8 +838,9 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
 
 
-        plt.subplots_adjust(left=.124, bottom=.107, right=None, top=None, wspace=.267, hspace=.212)
-        fig.savefig('assets/pics/lines_string_vectors.png', bbox_inches='tight')
+        plt.subplots_adjust(left=.079, bottom=.076, right=.952, top=.983, wspace=.267, hspace=.212)
+        fig.savefig('assets/pics/lines_model_all.png', bbox_inches='tight')
+        fig.savefig('assets/pics/lines_model_all.pdf', bbox_inches='tight')
 
         # Print *individual* images if needed
         for i, row in enumerate(ax):
@@ -856,6 +851,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
                 pad = 0.05
                 extent = extent.expanded(1.0 + pad, 1.0 + pad)
                 fig.savefig(f'assets/pics/line_models_ax_{i}_{j}.png', bbox_inches=extent)
+                fig.savefig(f'assets/pics/line_models_ax_{i}_{j}.pdf', bbox_inches=extent)
         
         plt.show()
 
