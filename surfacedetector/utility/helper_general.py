@@ -171,10 +171,10 @@ def get_angle(vec):
     rotation = np.degrees(np.arctan2(det, dot))
     return rotation
 
-def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
+def plot_fit_lines(ax, fit_lines, annotate=True, colors=None, function_key='fn', linestyle='-', **kwargs):
     next(ax._get_lines.prop_cycler)
     for i, fit_line in enumerate(fit_lines):
-        poly1d_fn = fit_line['fn']
+        poly1d_fn = fit_line[function_key]
         if colors is None:
             color = next(ax._get_lines.prop_cycler)['color']
         else:
@@ -183,10 +183,10 @@ def plot_fit_lines(ax, fit_lines, annotate=True, colors=None):
             else:
                 color = colors[i]
         if fit_line['flip_axis']:
-            ax.plot(poly1d_fn(fit_line['x_points']), fit_line['x_points'], '-',  c=color)
+            ax.plot(poly1d_fn(fit_line['x_points']), fit_line['x_points'], linestyle=linestyle,  c=color, **kwargs)
         else:
             points = fit_line['points']
-            ax.plot(points[:, 0], poly1d_fn(points[:, 0]), '-', c=color)
+            ax.plot(points[:, 0], poly1d_fn(points[:, 0]), linestyle=linestyle ,c=color, **kwargs)
         mean = fit_line['points'].mean(axis=0)
         if annotate:
             ang = get_angle(fit_line['dir_vec'])

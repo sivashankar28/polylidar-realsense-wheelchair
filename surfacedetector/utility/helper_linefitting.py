@@ -290,11 +290,11 @@ def orthogonal_distance(line_point, line_vec, points, return_median=True):
     line_proj = np.multiply(
         line_vec_array, line_proj.reshape(line_proj.shape[0], 1))
     perf_offset = line_offset - line_proj
-    _, lengths = normalized(perf_offset)
+    dir_vec, lengths = normalized(perf_offset)
     if return_median:
         return np.median(lengths)
     else:
-        return lengths
+        return dir_vec, lengths
 
     
 
@@ -593,14 +593,20 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         line_point = line['line_point']
         line_vec = line['dir_vec']
         all_points = line['points']
+        # save for reference later....
+        line['dir_vec_old'] = line_vec
+        line['line_point_old'] = line_point
 
         total_points = all_points.shape[0]
-        ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
+        ortho_dir, ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
         mask = ortho_dist < max_ortho_offset
         points_ = all_points[mask, :]
         inlier_abs_dev = ortho_dist[mask]
 
-        ortho_dist**2
+        line['ortho_dir'] = ortho_dir
+        line['ortho_dist'] = ortho_dist
+        line['ortho_dir_dist'] = ortho_dir * ortho_dist[:, np.newaxis]
+        line['inlier_mask'] = mask
 
         # print(f"For LP: {line_point}; line_vec: {line_vec}")
         # pprint(ortho_dist)
@@ -622,10 +628,12 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         coef = np.polyfit(x_points, y_points, 1, w=w)
         poly1d_fn = np.poly1d(coef)
         
+        line['fn_old'] = line['fn']
         line['fn'] = poly1d_fn
         line['x_points'] = x_points
         line['y_points'] = y_points
         line['points'] = points_
+        line['all_points'] = all_points
         line['rmse'] = np.sqrt(np.sum((inlier_abs_dev **2)) / inlier_abs_dev.shape[0])
 
         # TODO dir_vec should be updated
@@ -805,9 +813,28 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         set_up_axes(ax[1,0])
 
         # Plot Model Evaluation for one of the clusters
-        ax[1, 1].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
+        # Show orthogonal distance offsets, mask out those that are outliers
+        low_alpha = 0.3
+        line_model = line_models_filtered[0]
+        all_points = line_model['all_points']
+        ortho_dir_dist = line_model['ortho_dir_dist'] * -1
+        inlier_mask = line_model['inlier_mask']
+        point_colors_alpha = np.ones((all_points.shape[0], 4))
+        point_colors_alpha[:, :] = TABLEAU_COLORS['tab:gray']
+        point_colors_alpha[~inlier_mask] = low_alpha
+        ax[1, 1].scatter(pc[:, 0], pc[:, 1], c=point_colors_alpha, s=35)
+        for i in range(all_points.shape[0]):
+            point = all_points[i, :]
+            new_point = point + ortho_dir_dist[i, :]
+            line_color= np.array(TABLEAU_COLORS['tab:red'])
+            line_color[3] = TABLEAU_COLORS['tab:red'][3] if inlier_mask[i] else low_alpha
+            ax[1,1].plot([point[0], new_point[0]], [point[1], new_point[1]], color=line_color)
+            point1 = line_model['line_point_old'] 
+            point2 = line_model['line_point_old'] + line_model['dir_vec_old']
+            ax[1,1].axline(point1, xy2=point2, c=averaged_cluster_colors[line_model['cluster_idx']], linestyle='--')
         set_up_axes(ax[1, 1])
 
+        # Plot all the best models
         ax[1,2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
         plot_fit_lines(ax[1,2], line_models_filtered, colors=averaged_cluster_colors)
         # plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx)])

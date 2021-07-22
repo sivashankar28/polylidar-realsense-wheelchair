@@ -388,7 +388,7 @@ def process(data, fname='planes_R_r45_1.5_0001'):
     top_normal = np.array([0.0, 0.0, 1.0])
 
     t1 = time.perf_counter()
-    filtered_top_points = filter_points_from_wheel_chair(top_points)  # <100 us
+    filtered_top_points = filter_points_from_wheel_chair(top_points, max_planar_distance=1.5)  # <100 us
     t2 = time.perf_counter()
 
     print("Visualize 3D Data")
