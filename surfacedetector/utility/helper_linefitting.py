@@ -37,7 +37,7 @@ import matplotlib
 from pprint import pprint
 from scipy.cluster.hierarchy import linkage, fcluster
 
-from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points
+from surfacedetector.utility.helper_general import setup_figure_2d, plot_fit_lines, plot_points, draw_brace_updated
 from surfacedetector.utility.AngleAnnotation import AngleAnnotation
 
 from matplotlib.transforms import Bbox
@@ -593,9 +593,6 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         line_point = line['line_point']
         line_vec = line['dir_vec']
         all_points = line['points']
-        # save for reference later....
-        line['dir_vec_old'] = line_vec
-        line['line_point_old'] = line_point
 
         total_points = all_points.shape[0]
         ortho_dir, ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
@@ -628,6 +625,8 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         coef = np.polyfit(x_points, y_points, 1, w=w)
         poly1d_fn = np.poly1d(coef)
         
+        line['dir_vec_old'] = line_vec
+        line['line_point_old'] = line_point
         line['fn_old'] = line['fn']
         line['fn'] = poly1d_fn
         line['x_points'] = x_points
@@ -636,7 +635,6 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         line['all_points'] = all_points
         line['rmse'] = np.sqrt(np.sum((inlier_abs_dev **2)) / inlier_abs_dev.shape[0])
 
-        # TODO dir_vec should be updated
         y_points = poly1d_fn(x_points)
         p1 = np.array([x_points[0], y_points[0]])
         p2 = np.array([x_points[-1], y_points[-1]])
@@ -651,6 +649,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
             dir_vec *= -1.0
         # print("Refit ", dir_vec)
         line['dir_vec'] = dir_vec
+        line['dir_vec_ang'] = np.degrees(np.arctan2(dir_vec[1], dir_vec[0]))
 
         filtered_line_models.append(line)
     return filtered_line_models
@@ -759,10 +758,10 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         colors_lines = np.array(cmap_viridis([i/mid_point.shape[0] for i in range(mid_point.shape[0])]))
 
         fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
-        ax[0,0].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
+        ax[0,0].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'], ec='k')
         set_up_axes(ax[0,0])
         ax[0,0].quiver(mid_point[:, 0], mid_point[:, 1], line_vec_norm_orig[:, 0], line_vec_norm_orig[:, 1], 
-                        color=colors_lines, edgecolor='k', width=0.01, linewidth=1)
+                        color=colors_lines, edgecolor='k', width=0.01, minlength=2, linewidth=1)
 
 
         for i in range(mid_point.shape[0]):
@@ -780,7 +779,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # polar_r = np.linalg.norm(condensed_param_set, axis=1)
         ax[0,2].remove()
         ax_polar = fig.add_subplot(2, 3, 3, projection='polar')
-        ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines, ec='k')
+        ax_polar.scatter(np.radians(deg_ang), origin_offset, c=colors_lines, ec='k', zorder=10)
         # ax_polar.set_xlim(0, np.pi)
         # ax[0,1].scatter(parameter_set[:, 0], parameter_set[:, 1])
         ax[0,2].set_xlim(-1.175, 1.175)
@@ -802,12 +801,15 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
         # Draw Ovals for the averaged clusters
         averaged_cluster_colors = dict()
-        for cluster_num in cluster_idx:
+        for i, cluster_num in enumerate(cluster_idx):
             mask = clusters == cluster_num
             data = condensed_param_set[mask, :]
             average_color = np.mean(colors_lines[mask, :], axis=0)
             averaged_cluster_colors[cluster_num] = average_color
-            bounding_elipse(data, ax[1,0], n_std=1.4, edgecolor='red')
+            _, meta = bounding_elipse(data, ax[1,0], n_std=1.4, edgecolor='red')
+            text_point = np.array([meta['x'], meta['y']]) + np.array([meta['width']/2.0, meta['height']/1.5]) 
+            ax[1,0].annotate(f"{i+1}", text_point, va='center', ha='center')
+
             # confidence_ellipse(data[:, 0], data[:, 1], ax[1,0], n_std=3, edgecolor='red')
         # ax[1,0].scatter(condensed_param_set[:,0], condensed_param_set[:,1], c=tab10_colors[clusters], ec='k')
         set_up_axes(ax[1,0])
@@ -835,7 +837,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         set_up_axes(ax[1, 1])
 
         # Plot all the best models
-        ax[1,2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'])
+        ax[1,2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'],  ec='k')
         plot_fit_lines(ax[1,2], line_models_filtered, colors=averaged_cluster_colors)
         # plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx)])
         set_up_axes(ax[1,2])
@@ -1030,7 +1032,7 @@ def plot_maneuver(result, best_fit_line):
     ax.scatter(platform_center[0], platform_center[1], c='k', zorder=3)
     # Plot Platform Line (square box projected to XY plane)
     ax.plot(platform_square[:2, 0], platform_square[:2, 1], c=[1.0, 0.0, 0.0, 1.0])
-    ax.text(platform_center[0] - 0.25, platform_center[1], 'Curb')
+    ax.text(platform_center[0] - 0.10, platform_center[1] +0.15, 'Curb', rotation=best_fit_line['dir_vec_ang'], ha='center', va='center')
     # Plot POI
     ax.scatter(platform_poi_pos_wheel_chair[0], platform_poi_pos_wheel_chair[1], c='tab:blue', ec='k', zorder=5)
     ax.text(platform_poi_pos_wheel_chair[0] - 0.18, platform_poi_pos_wheel_chair[1]-0.01, 'POI', zorder=5)
@@ -1039,7 +1041,7 @@ def plot_maneuver(result, best_fit_line):
     ax.text(0.05, -0.05, 'Wheelchair Origin')
 
     # Plot Platform Normal (red)
-    platform_normal = -0.62 *result['platform_normal_inverted_unit']
+    platform_normal = -0.65 *result['platform_normal_inverted_unit']
     arrow_platform_normal = arrow_(ax, platform_center[0], platform_center[1], platform_normal[0], platform_normal[1], ec='tab:red', fc='tab:red', width=.01) #label=rf'Platform Normal, $\boldsymbol{$\alpha$}$'
     # Plot Wheel Chair Direction (green)
     arrow_wc_dir = arrow_(ax, 0.0, 0.0, 0, 1.0, ec='tab:green', fc='tab:green', width=.01)
@@ -1051,6 +1053,11 @@ def plot_maneuver(result, best_fit_line):
     # Angle Annotations
     AngleAnnotation((0.0, 0.0),[0, 1], result['vec_wheel_chair_to_poi_2D_unit'], ax=ax, fig=fig, size=125, text=rf'$\alpha$', textposition='outside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
     AngleAnnotation((0.0, 0.0),result['platform_normal_inverted_unit'][:2], [0,1], ax=ax, fig=fig, size=175, text=rf'$\beta$', textposition='outside')
+
+    # Brace Annotation
+    poi_pseudo = (platform_center + 1.1 *platform_normal)[:2]
+    pc_pseudo = (platform_center + .05 * platform_normal)[:2]
+    draw_brace_updated(ax, poi_pseudo, pc_pseudo, r"$\delta=0.7$", zorder=15)
 
     # Create Legend, need custom code to draw arrows
     import matplotlib.patches as mpatches

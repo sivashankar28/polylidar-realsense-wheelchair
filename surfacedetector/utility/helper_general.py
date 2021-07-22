@@ -19,11 +19,11 @@ def create_transform(translate=[0.0, 0.0], rot=45, deg=True):
 def draw_brace_updated(ax, p1, p2, text, rotation=0, zorder=1):
     """Draws an annotated brace on the axes."""
     ax.autoscale(False)
-
+    
     p1 = np.array(p1)
     p2 = np.array(p2)
     # Get Direction vector of two points
-    vec = np.array([p2[0] - p1[1], p2[1]- p1[1]])
+    vec = np.array([p2[0] - p1[0], p2[1]- p1[1]])
     # Get brace length
     brace_length = np.linalg.norm(vec)
     # normalize vec
@@ -253,7 +253,7 @@ def bounding_elipse(points, ax, n_std=1.1, facecolor='none', **kwargs):
         facecolor=facecolor,
         **kwargs)
 
-    return ax.add_patch(ellipse)
+    return ax.add_patch(ellipse), dict(width=width, height=height, x=x_mean, y=y_mean, angle=angle)
 
 def minimum_bounding_rectangle(points):
     """

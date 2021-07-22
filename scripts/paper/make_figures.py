@@ -40,10 +40,10 @@ font = {'family' : 'sans-serif',
         'size'   : 12}
 matplotlib.rc('font', **font)
 TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
-params = {
+MATPLOTLIB_PARAMS = {
   "text.usetex": True,
   "text.latex.preamble": r"\usepackage{amsmath} \usepackage{mathtools}"}
-matplotlib.rcParams.update(params)
+matplotlib.rcParams.update(MATPLOTLIB_PARAMS)
 
 ToGLCamera = np.array([
     [1,  0,  0,  0],
@@ -294,19 +294,6 @@ def plot_fit_lines(ax, fit_lines, annotate=True):
         if annotate:
             ax.annotate(f"RMSE={fit_line['rmse']:.3f}", (mean[0], mean[1]))
 
-# def visualize_2d(top_points_raw, top_points_2d, all_fit_lines, best_fit_lines):
-#     # top_points_2d, height, all_fit_lines, best_fit_lines = extract_lines_wrapper(
-#     #     top_points, top_normal, min_points_line)
-#     fig, ax = setup_figure_2d()
-#     plot_points(ax[0], top_points_raw)
-#     plot_points(ax[1], top_points_2d)
-#     for i in range(top_points_2d.shape[0]):
-#         ax[1].annotate(str(i), (top_points_2d[i, 0], top_points_2d[i, 1]))
-#     plot_fit_lines(ax[1], all_fit_lines, annotate=False)
-#     plot_fit_lines(ax[2], best_fit_lines)
-
-#     plt.show()
-
 def demonstrate_lines():
     x = np.array([0, 0.25, 0.5, 0.75, 1.0])
     y = np.array([1.0, 0.75, 0.5, 0.25, 0.0])
@@ -326,9 +313,14 @@ def demonstrate_lines():
                 length_includes_head=True, zorder=2)
 
 
-    # ax.annotate(r"$\begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + \alpha \begin{psmallmatrix}\sqrt{2}/2 \\ -\sqrt{2}/2 \end{psmallmatrix} $", (0.1, 0.95))
-    ax.annotate(r"$\mathbf{p} = \begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + t \begin{psmallmatrix}.707 \\ -.707 \end{psmallmatrix} $",
-                 (0.25, 0.84), size=12, rotation=-45, ha='center', va='center')
+    # If latex is allowed, plot the full parameters of vector, else just plot generic
+    if matplotlib.rcParams['text.usetex']:
+        ax.annotate(r"$\mathbf{p} = \begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + t \begin{psmallmatrix}.707 \\ -.707 \end{psmallmatrix} $",
+                    (0.25, 0.84), size=12, rotation=-45, ha='center', va='center')
+        # ax.annotate(r"$\begin{psmallmatrix}0.1 \\ 0.9 \end{psmallmatrix} + \alpha \begin{psmallmatrix}\sqrt{2}/2 \\ -\sqrt{2}/2 \end{psmallmatrix} $", (0.1, 0.95))
+    else:
+        ax.annotate(r"$\mathbf{p} = \mathbf{p_o} + t \hat{\mathbf{v}}$",
+                    (0.25, 0.84), size=12, rotation=-45, ha='center', va='center')
     ax.annotate(r"$y = -1.0 x + 1.0$", (0.60, 0.46), size=12, rotation=-45, ha='center', va='center')
     AngleAnnotation((0.0, 0.0), [1, 0], [0.5, 0.5],ax=ax, fig=fig, size=220, text=r'$45^{\circ}$', textposition='inside') # text_kw=dict(bbox=dict(boxstyle="round", fc="w"))
     draw_brace_updated(ax, (0.0,0.0), (0.48, 0.48), r"offset=$.707$", zorder=15)
@@ -454,10 +446,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# What do you want to see?
-# Picture of the Environment
-# 3D Pont Cloud of the Polygon, Both Surfaces, and sensor frame frustum
-# 
-
