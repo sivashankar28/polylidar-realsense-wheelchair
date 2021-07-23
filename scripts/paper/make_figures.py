@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import cm
 from matplotlib import colors as mcolors
+from matplotlib.patches import Rectangle
 from matplotlib import rc
 import numpy as np
 import open3d as o3d
@@ -311,6 +312,9 @@ def demonstrate_lines():
     line_hdl = ax.plot(x, y, color=TABLEAU_COLORS['tab:orange'], linewidth=2, zorder=5)[0]
     arrow_hdl_2 = ax.arrow(0.0, 0.0, 0.5, 0.5, color=TABLEAU_COLORS['tab:green'], head_width=0.04,  width=0.008, \
                 length_includes_head=True, zorder=2)
+
+    r1 = Rectangle((0.45, 0.45),0.072,0.072,-45, ec='k', fill=False)
+    ax.add_patch(r1)
 
 
     # If latex is allowed, plot the full parameters of vector, else just plot generic

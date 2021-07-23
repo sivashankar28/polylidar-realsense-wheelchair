@@ -783,7 +783,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # Clusters are denoted by the marker shape
         # Color is still based upon the original line model.
         tab10_colors = np.array(plt.cm.get_cmap('tab20').colors)
-        markers = ['o', 'v', '^', '<', '>', 'p', 's', 'P', '*', "X", "D", "d", "|", "_"]
+        markers = ['^', 'v', 'o', 'X', '>', 'p', 's', 'P', '*', "<", "D", "d", "|", "_"]
         cluster_nums = np.unique(clusters)
         for i, cluster_num in enumerate(cluster_nums):
             mask = clusters == cluster_num
@@ -1074,8 +1074,9 @@ def plot_maneuver(result, best_fit_line):
                     })
 
     ax.axis('equal')
-
+    plt.draw()
     fig.savefig('assets/pics/plot_maneuver.png', bbox_inches='tight')
+    fig.savefig('assets/pics/plot_maneuver.pdf', bbox_inches='tight')
 
 
 def arrow_(ax, x, y, dx, dy, **kwargs):

@@ -146,7 +146,10 @@ class AngleAnnotation(Arc):
                      (np.pi/4 - (a % (np.pi/4)))*((a % (np.pi/2)) >= np.pi/4)
                 return R90(aa, r, *[w, h][::int(np.sign(np.cos(2*a)))])
 
-            bbox = self.text.get_window_extent(renderer=self.fig.canvas.get_renderer())
+            try:
+                bbox = self.text.get_window_extent(renderer=self.fig.canvas.get_renderer())
+            except:
+                bbox = self.text.get_window_extent()
             X = R(angle, r, bbox.width, bbox.height)
             trans = self.ax.figure.dpi_scale_trans.inverted()
             offs = trans.transform(((X-s/2), 0))[0] * 72
