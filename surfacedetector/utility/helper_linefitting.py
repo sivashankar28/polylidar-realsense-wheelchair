@@ -135,16 +135,17 @@ def filter_points_from_wheel_chair(top_points, max_dist=0.05, max_planar_distanc
     nearest_dist_from_wc = dist_from_wc.min()
     far_dist = nearest_dist_from_wc + max_planar_distance
     a1 = (dist_from_wc < far_dist) & (dist_from_wc >= nearest_dist_from_wc)
-    # import ipdb; ipdb.set_trace()
-    # TODO handle if there is a false in the center, splice together from falses!
-    # print(a1)
-    np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
-    idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
-    great_idx = np.diff(idx_pairs, axis=1).argmax()
-    start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
+    # # import ipdb; ipdb.set_trace()
+    # # TODO handle if there is a false in the center, splice together from falses!
+    # # print(a1)
+    # np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
+    # idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
+    # great_idx = np.diff(idx_pairs, axis=1).argmax()
+    # start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
 
-    # print(start_idx, end_idx)
-    filtered_top_points = top_points_simplified[start_idx:end_idx, :]
+    # # print(start_idx, end_idx)
+    # filtered_top_points = top_points_simplified[start_idx:end_idx, :]
+    filtered_top_points = np.copy(top_points_simplified[1:,:][a1, :])
 
     if filtered_top_points.shape[0] < 3 or np.count_nonzero(filtered_top_points) < 3:
         print(top_points)
@@ -592,7 +593,6 @@ def create_line_model(line_point, line_vec, points, cluster_idx, max_slope=2.0):
     poly1d_fn = np.poly1d(coef)
     res = dict(points=points, x_points=x_points, y_points=y_points, fn=poly1d_fn, cluster_idx=cluster_idx,
             dir_vec=line_vec, line_point=line_point, flip_axis=flip_axis, points_2d_orig=points, rmse=0.0)
-
     return res
 
 def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.15):
@@ -603,6 +603,7 @@ def evaluate_and_filter_models(lines, max_ortho_offset=0.05, min_inlier_ratio=0.
         all_points = line['points']
 
         total_points = all_points.shape[0]
+        # import ipdb; ipdb.set_trace()
         ortho_dir, ortho_dist = orthogonal_distance(line_point, line_vec, all_points, return_median=False)
         mask = ortho_dist < max_ortho_offset
         points_ = all_points[mask, :]
@@ -776,7 +777,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     line_models = [create_line_model(cluster_average[i,:], line_vec_norm_cluster[i, :], pc, cluster_idx[i]) for i in range(cluster_average.shape[0])]
     line_models_filtered = evaluate_and_filter_models(line_models, max_ortho_offset=max_ortho_offset, min_inlier_ratio=min_inlier_ratio)
-
+    # pprint(line_models_filtered)
     if debug:
         # Angle Offset Parameter Space, not good for clustering, just showing for comparison in vis.
         # This if just for plotting, same info but in radians instead of (x,y) pont of circle
