@@ -130,17 +130,20 @@ def filter_points_from_wheel_chair(top_points, max_dist=0.05, max_planar_distanc
     #     print(top_points_simplified)
     #     raise ValueError('Not enough points after simplification')
 
+    # print(top_points_simplified)
     dist_from_wc = np.linalg.norm(top_points_simplified[1:,:] - wheel_chair_position, axis=1) #TODO fix weird bug here in simplification
     nearest_dist_from_wc = dist_from_wc.min()
     far_dist = nearest_dist_from_wc + max_planar_distance
     a1 = (dist_from_wc < far_dist) & (dist_from_wc >= nearest_dist_from_wc)
     # import ipdb; ipdb.set_trace()
-
+    # TODO handle if there is a false in the center, splice together from falses!
+    # print(a1)
     np_diff = np.diff(np.hstack(([False], a1 == True, [False])))
     idx_pairs = np.where(np_diff)[0].reshape(-1, 2)
     great_idx = np.diff(idx_pairs, axis=1).argmax()
     start_idx, end_idx = idx_pairs[great_idx, 0], idx_pairs[great_idx, 1]
 
+    # print(start_idx, end_idx)
     filtered_top_points = top_points_simplified[start_idx:end_idx, :]
 
     if filtered_top_points.shape[0] < 3 or np.count_nonzero(filtered_top_points) < 3:
@@ -404,6 +407,8 @@ def filter_lines(best_fit_lines, max_dot=0.2, w1=0.75, w2=0.25, return_only_one_
     Returns:
         [type]: [description]
     """
+    if len(best_fit_lines) == 0:
+        return best_fit_lines
     best_pair = []
     if return_only_one_line and best_fit_lines:
         # only return one line, choose the closest line
@@ -546,14 +551,17 @@ def get_point_clusters(points, clusters):
     return point_clusters
 
 
-def average_clusters(points, clusters, min_num_models=3):
+def average_clusters(points, clusters, min_num_models=3, use_median=True):
     """Average any clusters together by weights, remove any that don't meet a minimum requirements"""
     cluster_points = get_point_clusters(points, clusters)
     clusters_averaged = []
     cluster_idx = []
     for clust_idx, points in enumerate(cluster_points):
         if points.shape[0] >= min_num_models:
-            avg_point = np.average(points, axis=0)
+            if use_median:
+                avg_point = np.median(points, axis=0)
+            else:
+                avg_point = np.average(points, axis=0)
             clusters_averaged.append(avg_point)
             cluster_idx.append(clust_idx + 1)
 
@@ -666,7 +674,7 @@ def set_up_axes(ax):
 def extract_lines_parameterized(pc, idx_skip=2, window_size=4, 
                                 cluster_kwargs=dict(t=0.10, criterion='distance'),
                                 min_num_models=3, max_ortho_offset=0.05, min_inlier_ratio=0.20, 
-                                debug=False, max_origin_offset=2.5, min_origin_offset=0.5, **kwargs):
+                                debug=False, max_origin_offset=2.5, min_origin_offset=0.75, use_median=False, **kwargs):
     """Extract possible lines within line segment point cloud
     0. Dowsample point cloud segment by skipping over points with by index (idx_skip)
     1. Create vectors for each line segment. These vectors are simple proposed line models!
@@ -690,7 +698,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
     # 2. Smooth vector estimate of line
     skip_window_edge = int(np.ceil(window_size / 2.0)) # must remove points at edge of smoothed window, will give erroneous result if kept
-    skip_window_edge = 0
+    skip_window_edge = 1
     t2 = time.perf_counter()
     x = uniform_filter1d(diff[:, 0], size=window_size, mode='wrap')
     y = uniform_filter1d(diff[:, 1], size=window_size, mode='wrap')
@@ -712,12 +720,23 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     # Unit vector of angle estimate of line direction
     line_vec_norm, _ = normalized(diff_smooth_filt)
     line_vec_norm_orig = np.copy(line_vec_norm)
+    # We are flipping the DIRECTION of the vector to make it consistently have a positive x-value
+    # The direction of the vector does NOT matter for the line. We are doing this to simplify 
+    # the conversion to hesse normal form
     mask = line_vec_norm[:, 0] < 0
     line_vec_norm[mask, :] = -1 * line_vec_norm[mask, :] # change directionality of line_vec_norm if angle is negative value (always point +x)
-    # convert to original unit vector of line angle. Basically this unit vector of a line starting from origin that orthogonally intersects with the line estimate
-    # this is done as a 90 degree rotation of the line vector
-    rot = np.array([[np.cos(np.pi/2), -np.sin(np.pi/2.0)], [np.sin(np.pi/2.0), np.cos(np.pi/2.0)]])
-    ang_vec_norm = np.matmul(line_vec_norm, rot.transpose())
+    # convert to original unit vector of line to hesse normal form. 
+    # Basically fidn the line that intersect the line_vec_norm from the origin. Since the intersection is perpindcular
+    # We can solve this just using rotations of either 90 degrees (intersection happens ABOVE the x-axis)
+    # Or by 270 degrees, intersection happens below x-axis
+    rot_90 = np.array([[np.cos(np.pi/2), -np.sin(np.pi/2.0)], [np.sin(np.pi/2.0), np.cos(np.pi/2.0)]])
+    rot_180 = np.array([[np.cos(np.pi), -np.sin(np.pi)], [np.sin(np.pi), np.cos(np.pi)]])
+    # Every line is rotated 90 degrees
+    ang_vec_norm = np.matmul(line_vec_norm, rot_90.transpose())
+    # But lets rotate more for those lines that intersect below the X-axis
+    y_int = -mid_point[:, 0] / line_vec_norm[:, 0] * line_vec_norm[:, 1]  + mid_point[:, 1]
+    mask = y_int < 0
+    ang_vec_norm[mask, :] = np.matmul(ang_vec_norm[mask, :], rot_180.transpose())
 
     # Now we need to get orthogonal offset of this line from origin
     origin_offset = np.einsum('ij,ij->i', line_vec_norm, mid_point)[:, np.newaxis] * line_vec_norm - mid_point
@@ -725,7 +744,8 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     t4 = time.perf_counter()
     # Representing a line as a point in 2D space. All Euclidean Space, but same representation as angle offset parameter space
     # Scale origin offset such that angles the average offset is 1 meters.
-    origin_offset_scaled = np.clip(origin_offset, min_origin_offset, max_origin_offset)
+    # origin_offset_scaled = np.clip(origin_offset + min_origin_offset / 2.0, min_origin_offset, max_origin_offset)
+    origin_offset_scaled = origin_offset + min_origin_offset
     condensed_param_set = ang_vec_norm * origin_offset_scaled[:, np.newaxis] # used for clustering
     condensed_param_set_true = ang_vec_norm * origin_offset[:, np.newaxis] # true parametrization of line angle and origin offset
 
@@ -734,18 +754,24 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     # cluster similar lines by point distance
     try:
         clusters = cluster_lines(condensed_param_set, cluster_kwargs=cluster_kwargs)
-        cluster_average, cluster_idx = average_clusters(condensed_param_set_true, clusters, min_num_models=min_num_models)
+        cluster_average, cluster_idx = average_clusters(condensed_param_set_true, clusters, min_num_models=min_num_models, use_median=use_median)
         t5 = time.perf_counter()
     except Exception as e:
         logging.exception("Something went wrong during clustering")
         pprint(pc)
         pprint(condensed_param_set)
         raise
-
-    # Decompose the angle and the origin offset
+    # Note that these clusters are **POINTS** in eucidean space. They represent the vector of the hesse normal form.
+    # We now need to decompose these points back into the angle and origin offset. 
+    # We then need to conver the angle (hess angle) to the directional vector of the actual line (basically reverse the rotations we did previously)
     ang_vec_norm_cluster, _ = normalized(cluster_average)
+    # this is the y-value of where the line intersects
+    y_value_cluster = np.copy(ang_vec_norm_cluster[:, 1])
     # recover the line vector, reverse 90 degree rotation
-    line_vec_norm_cluster = np.matmul(ang_vec_norm_cluster, rot)
+    line_vec_norm_cluster = np.matmul(ang_vec_norm_cluster, rot_90)
+    # But lets reverse the extra rotation for lines that intersect below the X-axis
+    mask = y_value_cluster < 0
+    line_vec_norm_cluster[mask, :] = np.matmul(line_vec_norm_cluster[mask, :], rot_180)
 
     # 5. Filter the proposed "average" line models by inlier ratio from ALL points. Refit the line models with inliers to create a best fit line.
     line_models = [create_line_model(cluster_average[i,:], line_vec_norm_cluster[i, :], pc, cluster_idx[i]) for i in range(cluster_average.shape[0])]
@@ -796,7 +822,11 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         cluster_nums = np.unique(clusters)
         for i, cluster_num in enumerate(cluster_nums):
             mask = clusters == cluster_num
-            marker = markers[i]
+            try:
+                marker = markers[i]
+            except:
+                marker = markers[len(markers) - 1]
+                print("Too many clusters. Dont trust the markers")
             colors = colors_lines[mask, :]
             ax[1,0].scatter(condensed_param_set[mask,0], condensed_param_set[mask,1], c=colors, ec='k', marker=marker)
 
@@ -816,34 +846,35 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
 
         # Plot Model Evaluation for one of the clusters
         # Show orthogonal distance offsets, mask out those that are outliers
-        low_alpha = 0.3
-        line_model = line_models_filtered[0]
-        all_points = line_model['all_points']
-        ortho_dir_dist = line_model['ortho_dir_dist'] * -1
-        inlier_mask = line_model['inlier_mask']
-        point_colors_alpha = np.ones((all_points.shape[0], 4))
-        point_colors_alpha[:, :] = TABLEAU_COLORS['tab:gray']
-        point_colors_alpha[~inlier_mask, 3] = low_alpha
-        edge_colors_alpha = np.ones((all_points.shape[0], 4), dtype=float)
-        edge_colors_alpha[:, :3] = [0.0, 0.0, 0.0]
-        edge_colors_alpha[~inlier_mask, 3] = low_alpha
-        ax[1, 1].scatter(pc[:, 0], pc[:, 1], c=point_colors_alpha, s=35, ec=edge_colors_alpha)
-        for i in range(all_points.shape[0]):
-            point = all_points[i, :]
-            new_point = point + ortho_dir_dist[i, :]
-            line_color= np.array(TABLEAU_COLORS['tab:red'])
-            line_color[3] = TABLEAU_COLORS['tab:red'][3] if inlier_mask[i] else low_alpha
-            ax[1,1].plot([point[0], new_point[0]], [point[1], new_point[1]], color=line_color)
-            point1 = line_model['line_point_old'] 
-            point2 = line_model['line_point_old'] + line_model['dir_vec_old']
-            ax[1,1].axline(point1, xy2=point2, c=averaged_cluster_colors[line_model['cluster_idx']], linestyle='--')
-        set_up_axes(ax[1, 1])
+        if line_models_filtered:
+            low_alpha = 0.3
+            line_model = line_models_filtered[0]
+            all_points = line_model['all_points']
+            ortho_dir_dist = line_model['ortho_dir_dist'] * -1
+            inlier_mask = line_model['inlier_mask']
+            point_colors_alpha = np.ones((all_points.shape[0], 4))
+            point_colors_alpha[:, :] = TABLEAU_COLORS['tab:gray']
+            point_colors_alpha[~inlier_mask, 3] = low_alpha
+            edge_colors_alpha = np.ones((all_points.shape[0], 4), dtype=float)
+            edge_colors_alpha[:, :3] = [0.0, 0.0, 0.0]
+            edge_colors_alpha[~inlier_mask, 3] = low_alpha
+            ax[1, 1].scatter(pc[:, 0], pc[:, 1], c=point_colors_alpha, s=35, ec=edge_colors_alpha)
+            for i in range(all_points.shape[0]):
+                point = all_points[i, :]
+                new_point = point + ortho_dir_dist[i, :]
+                line_color= np.array(TABLEAU_COLORS['tab:red'])
+                line_color[3] = TABLEAU_COLORS['tab:red'][3] if inlier_mask[i] else low_alpha
+                ax[1,1].plot([point[0], new_point[0]], [point[1], new_point[1]], color=line_color)
+                point1 = line_model['line_point_old'] 
+                point2 = line_model['line_point_old'] + line_model['dir_vec_old']
+                ax[1,1].axline(point1, xy2=point2, c=averaged_cluster_colors[line_model['cluster_idx']], linestyle='--')
+            set_up_axes(ax[1, 1])
 
-        # Plot all the best models
-        ax[1,2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'],  ec='k')
-        plot_fit_lines(ax[1,2], line_models_filtered, colors=averaged_cluster_colors)
-        # plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx)])
-        set_up_axes(ax[1,2])
+            # Plot all the best models
+            ax[1,2].scatter(pc[:, 0], pc[:, 1], color=TABLEAU_COLORS['tab:gray'],  ec='k')
+            plot_fit_lines(ax[1,2], line_models_filtered, colors=averaged_cluster_colors)
+            # plot_fit_lines(ax[1,1], line_models_filtered, colors=tab10_colors[np.array(cluster_idx)])
+            set_up_axes(ax[1,2])
 
 
 

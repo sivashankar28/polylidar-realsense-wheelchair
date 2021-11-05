@@ -436,8 +436,7 @@ def capture(config, video=None):
                     #         planes=planes, obstacles=obstacles, proj_mat=proj_mat, config=config,
                     #         sensor_to_wheel_chair_transform=sensor_to_wheel_chair_transform), 
                     #         f"data/scratch_test/planes_{fname}_{counter:04}.joblib")
-                    # input("Press Enter to move to next frame...")
-                
+                    # sys.exit(0)
                     found_curb = False
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:

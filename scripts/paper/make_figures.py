@@ -42,7 +42,7 @@ font = {'family' : 'sans-serif',
 matplotlib.rc('font', **font)
 TABLEAU_COLORS = {k: mcolors.to_rgba(v) for (k,v) in mcolors.TABLEAU_COLORS.items()}
 MATPLOTLIB_PARAMS = {
-  "text.usetex": True,
+  "text.usetex": False,
   "text.latex.preamble": r"\usepackage{amsmath} \usepackage{mathtools}"}
 matplotlib.rcParams.update(MATPLOTLIB_PARAMS)
 

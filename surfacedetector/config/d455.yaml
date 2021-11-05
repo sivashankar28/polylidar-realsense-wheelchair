@@ -115,11 +115,14 @@
       # ]
   linefitting:
     # first pass of extracting lines
-    window_size: 6 # window size to smooth points
+    window_size: 4 # window size to smooth points
     cluster_kwargs:
       t: 0.10
       criterion: "distance"
     # Line Model Requirements
     min_num_models: 3
     max_ortho_offset: 0.05
-    min_inlier_ratio: 0.25
+    min_inlier_ratio: 0.10
+    min_origin_offset: 0.75
+    max_origin_offset: 2.5
+    use_median: true
