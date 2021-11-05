@@ -686,20 +686,29 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
     assert idx_max != 0 or idx_max != length.shape[0] - \
         1, "LineString is not continuously connected"
 
+    # TODO it would be nice to reflect and pad the array so that line 697 is not necessary
+
     # 2. Smooth vector estimate of line
     skip_window_edge = int(np.ceil(window_size / 2.0)) # must remove points at edge of smoothed window, will give erroneous result if kept
+    skip_window_edge = 0
     t2 = time.perf_counter()
-    x = uniform_filter1d(diff[:, 0], size=window_size)
-    y = uniform_filter1d(diff[:, 1], size=window_size)
+    x = uniform_filter1d(diff[:, 0], size=window_size, mode='wrap')
+    y = uniform_filter1d(diff[:, 1], size=window_size, mode='wrap')
     diff_smooth = np.column_stack((x, y))
-    diff_smooth_filt = diff_smooth[skip_window_edge-1:-skip_window_edge]
+    if skip_window_edge == 0:
+        diff_smooth_filt = diff_smooth
+    else:
+        diff_smooth_filt = diff_smooth[skip_window_edge-1:-skip_window_edge]
     t3 = time.perf_counter()
 
     # 3. Represent these line models (smoothed vectors) in a parameter space, angle and origin offset
     #    Neat Trick - Convert angle to postion on unit sphere (normalized) and then scale with origin offset
     #    Now we have a single 2D point in Euclidean space that represents the line angle and origin offset. Points close together mean similar lines!
     # MidPoint of estimated line
-    mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge-1:-skip_window_edge, :]
+    if skip_window_edge == 0:
+        mid_point = ((pc_shift + pc_skip)/2.0)
+    else:
+        mid_point = ((pc_shift + pc_skip)/2.0)[skip_window_edge-1:-skip_window_edge, :]
     # Unit vector of angle estimate of line direction
     line_vec_norm, _ = normalized(diff_smooth_filt)
     line_vec_norm_orig = np.copy(line_vec_norm)
@@ -783,7 +792,7 @@ def extract_lines_parameterized(pc, idx_skip=2, window_size=4,
         # Clusters are denoted by the marker shape
         # Color is still based upon the original line model.
         tab10_colors = np.array(plt.cm.get_cmap('tab20').colors)
-        markers = ['^', 'v', 'o', 'X', '>', 'p', 's', 'P', '*', "<", "D", "d", "|", "_"]
+        markers = ['^', 'v', 'o', 'X', 's', 'p', '>', 'P', '*', "<", "D", "d", "|", "_", "H", "."]
         cluster_nums = np.unique(clusters)
         for i, cluster_num in enumerate(cluster_nums):
             mask = clusters == cluster_num
@@ -1053,7 +1062,7 @@ def plot_maneuver(result, best_fit_line):
     # Brace Annotation
     poi_pseudo = (platform_center + 1.1 *platform_normal)[:2]
     pc_pseudo = (platform_center + .05 * platform_normal)[:2]
-    draw_brace_updated(ax, poi_pseudo, pc_pseudo, r"$\delta=0.7$", zorder=15)
+    draw_brace_updated(ax, poi_pseudo, pc_pseudo, r"$\delta$", zorder=15)
 
     # Create Legend, need custom code to draw arrows
     import matplotlib.patches as mpatches
@@ -1066,8 +1075,8 @@ def plot_maneuver(result, best_fit_line):
     # Platform normal vector
     plt.legend([arrow_platform_normal, arrow_wc_dir, arrow_poi_dir, arrow_normal_inv], 
             [r'Curb Normal, $\mathbf{n_c}$',
-             r'Wheelchair Direction, $\mathbf{v_1}$',
-             r'POI Direction, $\mathbf{v_2}$',
+             r'Wheelchair Heading, $\mathbf{h_w}$',
+             r'POI Direction, $\mathbf{v_1}$',
              r'Inv Curb Normal, $-\mathbf{n_c}$'
              ], loc='upper right', fontsize=11,
              handler_map={mpatches.FancyArrow : HandlerPatch(patch_func=make_legend_arrow),

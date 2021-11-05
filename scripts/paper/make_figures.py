@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import cm
 from matplotlib import colors as mcolors
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Polygon, Rectangle
 from matplotlib import rc
 import numpy as np
 import open3d as o3d
@@ -399,7 +399,7 @@ def process(data, fname='planes_R_r45_1.5_0001'):
     platform_center_pos_wheel_chair_frame = best_fit_lines[0]['hplane_point'] 
     platform_normal_wheel_chair_frame = best_fit_lines[0]['hplane_normal']
     result = compute_turning_manuever(platform_center_pos_wheel_chair_frame, platform_normal_wheel_chair_frame, best_fit_lines[0],
-                                        poi_offset=0.75, debug=True)
+                                        poi_offset=0.7, debug=True)
     plt.show()
 
     visualize_3d(top_points, bottom_points, None, fit_line=best_fit_lines[0], result=result,
@@ -407,12 +407,18 @@ def process(data, fname='planes_R_r45_1.5_0001'):
                 color_image=color_image, depth_image=depth_image, fname='curb_turning_3d.png')
 
     square_points_sensor_frame = transform_points(best_fit_lines[0]['square_points'], np.linalg.inv(sensor_to_wheel_chair_transform))
+    simplified_polygon = transform_points(filtered_top_points, np.linalg.inv(sensor_to_wheel_chair_transform))
+    color_image_dupe = np.copy(color_image)
     plot_planes_and_obstacles(planes[:1], obstacles, proj_mat, None, color_image, config)
     cv2.imwrite(f"./assets/pics/{fname}_poly_1.png",color_image)
-    plot_planes_and_obstacles(planes[:2], obstacles, proj_mat, None, color_image, config)
+    plot_planes_and_obstacles(planes[1:2], obstacles, proj_mat, None, color_image, config)
     cv2.imwrite(f"./assets/pics/{fname}_poly_2.png",color_image)
-    plot_points_cv2(square_points_sensor_frame, proj_mat, color_image, config, color=(0, 0, 225), thickness=3)
-    cv2.imwrite(f"./assets/pics/{fname}_curb_estimate_with_poly.png",color_image)
+
+    plot_points_cv2(simplified_polygon, proj_mat, color_image_dupe, config, color=(0, 255, 0), thickness=2)
+    cv2.imwrite(f"./assets/pics/{fname}_poly_3.png",color_image_dupe)
+    plot_points_cv2(square_points_sensor_frame, proj_mat, color_image_dupe, config, color=(0, 0, 225), thickness=3)
+    cv2.imwrite(f"./assets/pics/{fname}_curb_estimate_with_poly.png",color_image_dupe)
+
 
     t3 = time.perf_counter()
     ms1 = (t2-t1) * 1000
