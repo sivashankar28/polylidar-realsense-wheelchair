@@ -1094,8 +1094,10 @@ def plot_maneuver(result, best_fit_line):
     # Brace Annotation
     poi_pseudo = (platform_center + 1.1 *platform_normal)[:2]
     pc_pseudo = (platform_center + .05 * platform_normal)[:2]
-    draw_brace_updated(ax, poi_pseudo, pc_pseudo, r"$\delta$", zorder=15)
-
+    try:
+        draw_brace_updated(ax, poi_pseudo, pc_pseudo, r"$\delta$", zorder=15)
+    except:
+        print("Error drawing brace on plot")
     # Create Legend, need custom code to draw arrows
     import matplotlib.patches as mpatches
     from matplotlib.legend_handler import HandlerPatch

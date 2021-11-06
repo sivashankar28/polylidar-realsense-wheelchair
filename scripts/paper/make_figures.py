@@ -20,7 +20,7 @@ import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from surfacedetector.utility.helper_general import set_axes_equal, plot_points, setup_figure_2d, setup_figure_3d, draw_brace_updated
 from scripts.paper.visgui import AppWindow
-from surfacedetector.utility.helper import plot_points as plot_points_cv2, plot_planes_and_obstacles
+from surfacedetector.utility.helper import get_pix_coordinates, plot_points as plot_points_cv2, plot_planes_and_obstacles
 
 from surfacedetector.utility.helper_linefitting import extract_lines_wrapper_new, filter_points_from_wheel_chair, choose_plane, compute_turning_manuever, transform_points
 from scripts.o3d_util import create_point
@@ -371,6 +371,11 @@ def process(data, fname='planes_R_r45_1.5_0001'):
     top_points, top_normal = top_plane['all_points'], top_plane['normal_ransac']
     bottom_points = bottom_plane['all_points']
 
+    # Filter points that are too close the image sides
+    top_points_filtered = np.copy(top_points)
+    pixels = get_pix_coordinates(np.transpose(top_points_filtered), proj_mat,  config['color']['width'], config['color']['height'])
+    mask = (pixels[:, 1] < 20) | (pixels[:, 0] < 20) | (pixels[:, 1] > (config['color']['height'] - 20)) | (pixels[:, 0] > (config['color']['width'] - 20))
+    top_points_filtered = top_points_filtered[~mask,:]
 
     ## Save images
     cv2.imwrite(f"./assets/pics/{fname}_rgb.png", data['color_image'])
@@ -385,7 +390,7 @@ def process(data, fname='planes_R_r45_1.5_0001'):
     top_normal = np.array([0.0, 0.0, 1.0])
 
     t1 = time.perf_counter()
-    filtered_top_points = filter_points_from_wheel_chair(top_points, max_planar_distance=1.5)  # <100 us
+    filtered_top_points = filter_points_from_wheel_chair(transform_points(top_points_filtered, sensor_to_wheel_chair_transform), max_planar_distance=1.5)  # <100 us
     t2 = time.perf_counter()
 
     print("Visualize 3D Data")
