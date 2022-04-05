@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 from polylidar import MatrixDouble, Polylidar3D
 from polylidar.polylidarutil.open3d_util import create_lines
 
-from fastga import GaussianAccumulatorS2, MatX3d, IcoCharts
-from fastga.peak_and_cluster import find_peaks_from_ico_charts
-from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
+from fastgac import GaussianAccumulatorS2, MatX3d, IcoCharts
+from fastgac.peak_and_cluster import find_peaks_from_ico_charts
+from fastgac.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
 
 from surfacedetector.utility.helper_wheelchair import extract_geometric_plane
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes

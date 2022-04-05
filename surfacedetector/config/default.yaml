@@ -2,7 +2,7 @@
   name: Default Settings for D415 extracting multiple surfaces using Polylidar3D
   advanced: "surfacedetector/config/json/high_accuracy.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: false     # Only activate playback if this is true
+    enabled: true      # Only activate playback if this is true
     file: "data/D415/curbascend.bag"
     # file: "data/20200618_081754.bag"
     repeat: false     # repeat bag after its over
@@ -46,7 +46,7 @@
       distance: 2.5 # any pixel greater than x is removed
   mesh:
     use_cuda: true  # use GPU CUDA acceleration for mesh smoothing
-    stride: 1       # skip rows/columns
+    stride: 2       # skip rows/column -- SIVA originally set to one but changed to 4 as illegal memory crashes
     filter:
       loops_laplacian: 1 # how many iterations
       _lambda: 1.0 # weight factor for laplacian update

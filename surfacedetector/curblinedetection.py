@@ -17,9 +17,8 @@ import open3d as o3d
 import pandas as pd
 from joblib import dump, load
 
-
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastgac import GaussianAccumulatorS2, IcoCharts
 
 logging.basicConfig(level=logging.INFO)
 
@@ -281,7 +280,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
     # 1. Convert depth frame to downsampled organized point cloud
     # 2. Create a smooth mesh from the organized point cloud (OrganizedPointFilters)
     #     1. You can skip smoothing if desired and only rely upon Intel Realsense SDK
-    # 3. Estimate dominate plane normals in scene (FastGA)
+    # 3. Estimate dominate plane normals in scene (fastgac)
     # 4. Extract polygons from mesh using dominant plane normals (Polylidar3D)
 
     alg_timings = dict()
@@ -320,7 +319,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
     # np.save('L515_Depth.npy', depth_image)
     # np.save('L515_OPC.npy', opc)
     # save_dict_to_json('L515_meta.json', dict(depth_scale=depth_scale, intrinsics=intrinsics.tolist(),
-    #                                          mesh=config['mesh'], fastga=config['fastga'],
+    #                                          mesh=config['mesh'], fastgac=config['fastgac'],
     #                                          polylidar=config['polylidar'], postprocess=config['polygon']['postprocess']))
 
     # return planes, obstacles, geometric_planes, alg_timings, o3d_mesh
@@ -511,8 +510,8 @@ def capture(config, video=None):
                         cv2.imwrite(path.join(PICS_DIR, "{}_color.jpg".format(counter)), color_image_cv)
                         cv2.imwrite(path.join(PICS_DIR, "{}_stack.jpg".format(counter)), images)
 
-                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; FastGA: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f",
-                #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastga_total'],
+                # logging.info(f"Frame %d; Get Frames: %.2f; Check Valid Frame: %.2f; Laplacian: %.2f; Bilateral: %.2f; Mesh: %.2f; fastgac: %.2f; Plane/Poly: %.2f; Filtering: %.2f; Geometric Planes: %.2f",
+                #              counter, timings['t_get_frames'], timings['t_check_frames'], timings['t_laplacian'], timings['t_bilateral'], timings['t_mesh'], timings['t_fastgac_total'],
                 #              timings['t_polylidar_planepoly'], timings['t_polylidar_filter'], timings['t_geometric_planes'])
                 logging.info(f"Curb Height: %.2f", curb_height)
                 

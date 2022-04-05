@@ -17,7 +17,7 @@ import open3d as o3d
 import pandas as pd
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastgac import GaussianAccumulatorS2, IcoCharts
 
 from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper import (plot_planes_and_obstacles, create_projection_matrix,

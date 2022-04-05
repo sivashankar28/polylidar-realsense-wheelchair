@@ -1,4 +1,4 @@
-import serial
+# import serial
 import logging
 import sys
 import argparse
@@ -19,7 +19,7 @@ import pandas as pd
 from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastgac import GaussianAccumulatorS2, IcoCharts
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -416,20 +416,17 @@ def capture(config, video=None):
                     all_records.append(timings)
 
                     curb_height, first_plane, second_plane = analyze_planes(geometric_planes)
-                    
-                    
+                    # fname = config['playback']['file'].split('/')[1].split('.')[0]                   
                     # curb height must be greater than 2 cm and first_plane must have been found
                     if curb_height > 0.02 and first_plane is not None:
-                        square_points, normal_svm, center = hplane(first_plane, second_plane)
+                        square_points, normal_svm, center = hplane(first_plane, second_plane)                     
                         dist, theta = get_theta_and_distance(normal_svm, center, first_plane['normal_ransac'])
                         logging.info("Frame #: %s, Distance: %.02f meters, Theta: %.01f degrees", counter, dist, theta)
                         plot_points(square_points, proj_mat, color_image, config)
-                        # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
+                    #     # dump(dict(first_plane=first_plane, second_plane=second_plane), 'data/planes.joblib')
                     else:
                         logging.warning("Couldn't find the street and sidewalk surface")
-                    # ser.write(("{:.2f}".format(curb_height)+ "{:.2f}".format(dist)+ "{:.2f}".format(theta)+ "\n").encode())
-                    # ser.write(("{:.2f}".format(dist)+"\n").encode())
-                    # ser.write(("{:.2f}".format(theta)+"\n").encode())
+
                     # sys.exit()
                     # Plot polygon in rgb frame
                     plot_planes_and_obstacles(planes, obstacles, proj_mat, None, color_image, config)
