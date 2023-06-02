@@ -2,7 +2,7 @@
   name: Default Settings for D455 extracting multiple surfaces using Polylidar3D
   advanced: "surfacedetector/config/json/edgemap.json" # JSON file path holding advanced settings
   playback:           # this will play a bag file instead of connecting to a live sensor
-    enabled: true  # Only activate playback if this is true
+    enabled: false  # Only activate playback if this is true
     file: "data/D455/Error/R_M0D_0.5.bag" # fails, "data/D455/R_M0D_0.5.bag" "data/D455/R_R45D_1.5.bag"
     repeat: false     # repeat bag after its over
   save:
@@ -14,11 +14,11 @@
   color: # RGB Camera Settings
     width: 848  #424
     height: 480 #240
-    framerate: 60
+    framerate: 30
   depth: # Depth Camera Settings
     width: 848 #424
     height: 480 #240
-    framerate: 60
+    framerate: 30
   tracking: # T265 Camera Setting (Optional)
     enabled:  false  # Leave as false if you don't want to stream T265 in parallel
     playback: # If desire playback with tracking then point to the bag file for the T265

@@ -128,7 +128,7 @@ def analyze_planes(geometric_planes):
     ground_normal_index = 0
     mean_normal_ransac = np.array([0.0, 0.0, 0.0])
     at_least_two_planes = False
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
     for i, geometric_planes_for_normal in enumerate(geometric_planes):
         if len(geometric_planes_for_normal) > 1:
             at_least_two_planes = True

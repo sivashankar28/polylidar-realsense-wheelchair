@@ -110,7 +110,7 @@ def down_sample_normals(triangle_normals, down_sample_fraction=0.12, min_samples
     return triangle_normals_ds
 
 
-def get_image_peaks(ico_chart, ga, level=2, with_o3d=False,
+def get_image_peaks(IcoCharts, ga, level=2, with_o3d=False,
                     find_peaks_kwargs=dict(threshold_abs=2, min_distance=1, exclude_border=False, indices=False),
                     cluster_kwargs=dict(t=0.10, criterion='distance'),
                     average_filter=dict(min_total_weight=0.01),
@@ -122,11 +122,11 @@ def get_image_peaks(ico_chart, ga, level=2, with_o3d=False,
     ico_chart.fill_image(normalized_bucket_counts_by_vertex)  # this takes microseconds
     # plt.imshow(np.asarray(ico_chart.image))
     # plt.show()
-    peaks, clusters, avg_peaks, avg_weights = find_peaks_from_ico_charts(ico_chart, np.asarray(
+    peaks, clusters, avg_peaks, avg_weights = find_peaks_from_ico_charts(IcoCharts, np.asarray(
         normalized_bucket_counts_by_vertex), find_peaks_kwargs=find_peaks_kwargs, cluster_kwargs=cluster_kwargs, average_filter=average_filter)
     t2 = time.perf_counter()
 
-    gaussian_normals_sorted = np.asarray(ico_chart.sphere_mesh.vertices)
+    gaussian_normals_sorted = np.asarray(IcoCharts.sphere_mesh.vertices)
     
     # Create Open3D structures for visualization
     if with_o3d:
@@ -153,9 +153,9 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
         ga = GaussianAccumulatorS2Beta(level=level)
 
     if ico_chart_ is not None:
-        ico_chart = ico_chart_
+        IcoCharts = ico_chart_
     else:
-        ico_chart = IcoCharts(level=level)
+        IcoCharts = IcoCharts(level=level)
 
     triangle_normals = np.asarray(tri_mesh.triangle_normals)
     triangle_normals_ds = down_sample_normals(triangle_normals, **kwargs)
@@ -194,12 +194,12 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
     else:
         colored_icosahedron = None
 
-    elapsed_time_fastga = (t2 - t1) * 1000
+    elapsed_time_fastgac = (t2 - t1) * 1000
     elapsed_time_peak = (t4-t3) * 1000
-    elapsed_time_total = elapsed_time_fastga + elapsed_time_peak
+    elapsed_time_total = elapsed_time_fastgac + elapsed_time_peak
 
-    timings = dict(t_fastga_total=elapsed_time_total,
-                   t_fastga_integrate=elapsed_time_fastga, t_fastga_peak=elapsed_time_peak)
+    timings = dict(t_fastgac_total=elapsed_time_total,
+                   t_fastgac_integrate=elapsed_time_fastgac, t_fastgac_peak=elapsed_time_peak)
 
     ga.clear_count()
     # return avg_peaks, pcd_all_peaks, arrow_avg_peaks, colored_icosahedron, timings

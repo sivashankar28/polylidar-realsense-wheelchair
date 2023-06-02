@@ -47,10 +47,8 @@ axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
 
 def create_pipeline(config: dict):
     """Sets up the pipeline to extract depth and rgb frames
-
     Arguments:
         config {dict} -- A dictionary mapping for configuration. see default.yaml
-
     Returns:
         tuple -- pipeline, process modules, filters, t265 device (optional)
     """
@@ -198,7 +196,6 @@ def get_frames(pipeline, t265_pipeline, process_modules, filters, config):
         t265_pipeline {rs::pipeline} -- Optional T265 Pipeline, can be None
         process_modules {tuple} -- align, depth_to_disparity, disparity_to_depth, decimate
         filters {list[rs::filters]} -- List of filters to apply
-
     Returns:
         (rgb_image, depth_image, ndarray, meta) -- RGB Image, Depth Image (colorized), numpy points cloud, meta information
     """
@@ -260,13 +257,11 @@ def get_frames(pipeline, t265_pipeline, process_modules, filters, config):
 
 def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, **kwargs):
     """Extract polygons from point cloud
-
     Arguments:
         points {ndarray} -- NX3 numpy array
         config {dict} -- Configuration object
         h {int} -- height
         w {int} -- width
-
     Returns:
         tuple -- polygons, rotated downsample points, and rotation matrix
     """
@@ -297,7 +292,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
     alg_timings.update(timings)
 
     # 3. Estimate Dominate Plane Normals
-    fga = config['fastgac']
+    fga = config['fastga']
     avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
         mesh, ga_=ll_objects['ga'], ico_chart_=ll_objects['ico'], **fga)
     alg_timings.update(timings)
@@ -322,14 +317,11 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
 
 def valid_frames(color_image, depth_image, depth_min_valid=0.5):
     """Determines if returned color and depth images are valid for polygon extraction
-
     Arguments:
         color_image {ndarray} -- Color image
         depth_image {ndarray} -- Depth image
-
     Keyword Arguments:
         depth_min_valid {float} -- Minimum percentage of valid pixels in depth frame (default: {0.5})
-
     Returns:
         bool -- Whether frames are valid
     """
@@ -369,8 +361,8 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastgac']['level'])
-    ll_objects['ico'] = IcoCharts(level=config['fastgac']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
+    ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
 
     if video:
         frame_width = config['color']['width'] * 2

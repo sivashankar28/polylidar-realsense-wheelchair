@@ -19,7 +19,7 @@ import pandas as pd
 from joblib import dump, load
 
 from polylidar import MatrixDouble, MatrixFloat, extract_point_cloud_from_float_depth, Polylidar3D
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastgac import GaussianAccumulatorS2Beta, MatX3d, IcoCharts
 
 # from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
 from surfacedetector.utility.helper_planefiltering import filter_planes_and_holes
@@ -302,7 +302,7 @@ def get_polygon(depth_image: np.ndarray, config, ll_objects, h, w, intrinsics, *
     alg_timings.update(timings)
 
     # 3. Estimate Dominate Plane Normals
-    fga = config['fastga']
+    fga = config['fastgac']
     avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
         mesh, ga_=ll_objects['ga'], ico_chart_=ll_objects['ico'], **fga)
     alg_timings.update(timings)
@@ -374,8 +374,8 @@ def capture(config, video=None):
     # They need to be long lived (objects) because they hold state (thread scheduler, image datastructures, etc.)
     ll_objects = dict()
     ll_objects['pl'] = Polylidar3D(**config['polylidar'])
-    ll_objects['ga'] = GaussianAccumulatorS2(level=config['fastga']['level'])
-    ll_objects['ico'] = IcoCharts(level=config['fastga']['level'])
+    ll_objects['ga'] = GaussianAccumulatorS2Beta(level=config['fastgac']['level'])
+    ll_objects['ico'] = IcoCharts(level=config['fastgac']['level'])
 
     if video:
         frame_width = config['color']['width'] * 2
